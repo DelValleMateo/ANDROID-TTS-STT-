@@ -2,7 +2,9 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/ANDROID-TTS-STT-.iml" filepath="$PROJECT_DIR$/.idea/ANDROID-TTS-STT-.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/PTAH.iml" filepath="$PROJECT_DIR$/.idea/modules/PTAH.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/app/PTAH.app.androidTest.iml" filepath="$PROJECT_DIR$/.idea/modules/app/PTAH.app.androidTest.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/app/PTAH.app.main.iml" filepath="$PROJECT_DIR$/.idea/modules/app/PTAH.app.main.iml" />
     </modules>
   </component>
 </project>
