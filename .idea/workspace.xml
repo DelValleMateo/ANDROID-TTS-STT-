@@ -5,14 +5,12 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="e7a01b55-5aa4-4167-80d1-616d8fec576a" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/deploymentTargetSelector.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/app/src/main/java/com/uader/ptah/data/PtahApiService.kt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/app/src/main/java/com/uader/ptah/data/PtahModels.kt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.name" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/AndroidProjectSystem.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/gradle.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/gradle.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/caches/deviceStreaming.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/caches/deviceStreaming.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/codeStyles/Project.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/codeStyles/Project.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/modules.xml" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/PtahApp/app/src/main/java/com/example/app/MainActivity.kt" beforeDir="false" afterPath="$PROJECT_DIR$/PtahApp/app/src/main/java/com/example/app/MainActivity.kt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/PtahApp/app/src/main/java/com/example/app/MainScreen.kt" beforeDir="false" afterPath="$PROJECT_DIR$/PtahApp/app/src/main/java/com/example/app/MainScreen.kt" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -22,7 +20,7 @@
   <component name="ClangdSettings">
     <option name="formatViaClangd" value="false" />
   </component>
-  <component name="ExecutionTargetManager" SELECTED_TARGET="device_and_snapshot_combo_box_target[]" />
+  <component name="ExecutionTargetManager" SELECTED_TARGET="device_and_snapshot_combo_box_target[LocalEmulator::path=C:\Users\lucan\.android\avd\Pixel_6a.avd]" />
   <component name="ExternalProjectsData">
     <projectState path="$PROJECT_DIR$">
       <ProjectState />
@@ -99,13 +97,7 @@
     &quot;accountId&quot;: &quot;cefd380a-0983-45b8-81a4-e5fcd075b3f4&quot;
   }
 }</component>
-  <component name="GradleScriptDefinitionsStorage" workingDir="$PROJECT_DIR$" gradleHome="C:\Users\WINDOWS 10\.gradle\wrapper\dists\gradle-9.3.1-bin\23ovyewtku6u96viwx3xl3oks\gradle-9.3.1" javaHome="C:\Program Files\Android\Android Studio\jbr" gradleVersion="9.3.1">
-    <option name="jvmArguments">
-      <list>
-        <option value="-Didea.gradle.download.sources.force=true" />
-      </list>
-    </option>
-  </component>
+  <component name="GradleScriptDefinitionsStorage" workingDir="$PROJECT_DIR$" gradleHome="C:\Users\lucan\.gradle\wrapper\dists\gradle-9.3.1-bin\23ovyewtku6u96viwx3xl3oks\gradle-9.3.1" javaHome="C:\Program Files\Android\Android Studio\jbr" gradleVersion="9.3.1" />
   <component name="ProjectColorInfo">{
   &quot;associatedIndex&quot;: 8
 }</component>
@@ -119,6 +111,8 @@
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
+    "Android App.PTAH.app.executor": "Run",
+    "Android App.PTAH.app.unitTest.executor": "Run",
     "Gradle.ANDROID-TTS-STT- [testDebugUnitTest].executor": "Run",
     "Gradle.ANDROID-TTS-STT-.executor": "Run",
     "Gradle.Load Gradle Dependencies.executor": "Run",
@@ -132,7 +126,7 @@
     "cf.first.check.clang-format": "false",
     "cidr.known.project.marker": "true",
     "com.google.services.firebase.aqiPopupShown": "true",
-    "git-widget-placeholder": "feature/red-networking-jesus",
+    "git-widget-placeholder": "main",
     "kotlin-language-version-configured": "true",
     "last_opened_file_path": "C:/Users/lucan/OneDrive/Documentos/ANDROID-TTS-STT-",
     "settings.editor.selected.configurable": "reference.settingsdialog.project.gradle"
@@ -143,7 +137,7 @@
       <command value="gradle " />
     </option>
   </component>
-  <component name="RunManager" selected="Gradle.ANDROID-TTS-STT- [testDebugUnitTest]">
+  <component name="RunManager" selected="Android App.PTAH.app">
     <configuration name="PTAH.app" type="AndroidRunConfigurationType" factoryName="Android App" activateToolWindowBeforeRun="false">
       <module name="PTAH.app" />
       <option name="ANDROID_RUN_CONFIGURATION_SCHEMA_VERSION" value="1" />
@@ -466,14 +460,14 @@
     </configuration>
     <recent_temporary>
       <list>
-        <item itemvalue="Gradle.ANDROID-TTS-STT- [testDebugUnitTest]" />
         <item itemvalue="Gradle.ANDROID-TTS-STT-" />
+        <item itemvalue="Gradle.ANDROID-TTS-STT- [testDebugUnitTest]" />
       </list>
     </recent_temporary>
   </component>
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
-      <changelist id="ed14f986-d4a1-49b4-b034-ce99e192866b" name="Changes" comment="" />
+      <changelist id="e7a01b55-5aa4-4167-80d1-616d8fec576a" name="Changes" comment="" />
       <created>1777058619054</created>
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
