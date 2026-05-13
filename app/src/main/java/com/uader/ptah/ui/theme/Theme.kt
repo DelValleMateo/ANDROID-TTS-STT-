@@ -36,8 +36,9 @@ private val LightColorScheme = lightColorScheme(
 @Composable
 fun PTAHTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
+    // Dynamic color desactivado para garantizar contraste predecible
+    // del botón Enviar contra el fondo (Material You puede aplanarlos).
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {

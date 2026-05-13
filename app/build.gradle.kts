@@ -56,7 +56,7 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     // ViewModel para Compose (MVVM)
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
 
     // Retrofit y Gson (Para hacer las peticiones HTTP al servidor semántico)
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
