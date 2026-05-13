@@ -1,20 +1,38 @@
 package com.uader.ptah.data
 
-// Modelo para enviar la consulta
-data class QueryRequest(
+import com.google.gson.annotations.SerializedName
+
+// Request esperado por el Mock: {"consulta": "..."}.
+data class SemanticSearchRequest(
+    @SerializedName("consulta")
     val query: String
 )
 
-// Modelo para recibir cada artículo
+// Modelo de dominio usado por el ViewModel y la UI.
 data class NormativeArticle(
-    val id: Int,
+    val id: String,
     val title: String,
-    val content: String, // Este texto lo usará el TTS
+    val content: String,
     val relevance: Double? = null
 )
 
-// Respuesta completa del servidor
-data class SearchResponse(
-    val results: List<NormativeArticle>,
-    val count: Int
+// DTOs de red según CONTRATO_API.md y mock_server/app_mock.py.
+data class SemanticSearchResponse(
+    @SerializedName("estado")
+    val status: String?,
+    @SerializedName("mensaje")
+    val message: String?,
+    @SerializedName("resultados")
+    val results: List<SemanticArticleDto>?
+)
+
+data class SemanticArticleDto(
+    @SerializedName("id_articulo")
+    val articleId: String?,
+    @SerializedName("titulo")
+    val title: String?,
+    @SerializedName("contenido")
+    val content: String?,
+    @SerializedName("score_relevancia")
+    val relevanceScore: Double?
 )

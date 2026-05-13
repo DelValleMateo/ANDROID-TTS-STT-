@@ -16,8 +16,7 @@ object ServiceLocator {
 
     val ptahRepository: PtahRepository by lazy {
         PtahRepositoryImpl(
-            apiService = RetrofitProvider.apiService,
-            useFakeBackend = true
+            apiService = RetrofitProvider.apiService
         )
     }
 }

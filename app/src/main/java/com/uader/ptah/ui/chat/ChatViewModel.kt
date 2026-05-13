@@ -1,5 +1,7 @@
 package com.uader.ptah.ui.chat
 
+import android.os.SystemClock
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -38,24 +40,32 @@ class ChatViewModel(
         uiState = ChatUiState.Loading
 
         viewModelScope.launch {
+            val startedAt = SystemClock.elapsedRealtime()
+            Log.d(TAG, "Inicio de consulta al Mock")
+
             repository.searchRegulations(clean)
                 .onSuccess { results ->
+                    val latencyMs = SystemClock.elapsedRealtime() - startedAt
+                    Log.d(TAG, "Fin de consulta al Mock. Latencia: ${latencyMs}ms")
+
                     val reply = if (results.isEmpty()) {
-                        "Sin resultados."
+                        "Sin resultados.\nLatencia: ${latencyMs} ms"
                     } else {
                         results.joinToString(separator = "\n\n") { article ->
-                            "• ${article.title}\n${article.content}"
+                            "${article.title}\n${article.content}"
                         }
                     }
                     _messages.add(ChatMessage(ChatMessage.Author.SYSTEM, reply))
-                    uiState = ChatUiState.Success(results)
+                    uiState = ChatUiState.Success(results, latencyMs)
                 }
                 .onFailure { throwable ->
+                    val latencyMs = SystemClock.elapsedRealtime() - startedAt
                     val message = throwable.message ?: "Error desconocido"
+                    Log.e(TAG, "Error en consulta al Mock tras ${latencyMs}ms", throwable)
                     _messages.add(
                         ChatMessage(ChatMessage.Author.SYSTEM, "Error: $message")
                     )
-                    uiState = ChatUiState.Error(message)
+                    uiState = ChatUiState.Error(message, latencyMs)
                 }
         }
     }
@@ -70,5 +80,9 @@ class ChatViewModel(
             }
             return ChatViewModel(repository) as T
         }
+    }
+
+    private companion object {
+        const val TAG = "ChatViewModel"
     }
 }

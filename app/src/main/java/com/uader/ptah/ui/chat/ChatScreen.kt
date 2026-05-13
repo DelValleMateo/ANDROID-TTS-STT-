@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -177,7 +178,9 @@ private fun MessageBubble(message: ChatMessage) {
         ) {
             Text(
                 text = message.text,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                modifier = Modifier
+                    .widthIn(max = 300.dp)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
             )
         }
     }
@@ -204,9 +207,9 @@ private fun StatusRow(state: ChatUiState) {
         }
         is ChatUiState.Success -> Text(
             text = if (state.results.isEmpty()) {
-                "Consulta finalizada (sin resultados)."
+                "Consulta finalizada sin resultados. Latencia: ${state.latencyMs} ms."
             } else {
-                "Consulta finalizada: ${state.results.size} resultado(s)."
+                "Consulta finalizada: ${state.results.size} resultado(s). Latencia: ${state.latencyMs} ms."
             },
             color = MaterialTheme.colorScheme.onPrimaryContainer,
             modifier = Modifier
@@ -215,7 +218,8 @@ private fun StatusRow(state: ChatUiState) {
                 .padding(8.dp)
         )
         is ChatUiState.Error -> Text(
-            text = "Error: ${state.message}",
+            text = state.latencyMs?.let { "Error: ${state.message}. Latencia: ${it} ms." }
+                ?: "Error: ${state.message}",
             color = MaterialTheme.colorScheme.onErrorContainer,
             modifier = Modifier
                 .fillMaxWidth()
