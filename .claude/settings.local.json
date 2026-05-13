@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew.bat :app:compileDebugKotlin)",
+      "PowerShell(Get-Command *)",
+      "PowerShell(Test-Path *)",
+      "Bash(JAVA_HOME='C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr' PATH='C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\\\\bin:__TRACKED_VAR__' 'C:\\\\Users\\\\lucan\\\\OneDrive\\\\Documentos\\\\ANDROID-TTS-STT-\\\\gradlew.bat' -p 'C:\\\\Users\\\\lucan\\\\OneDrive\\\\Documentos\\\\ANDROID-TTS-STT-' :app:compileDebugKotlin --no-daemon)"
+    ]
+  }
+}
