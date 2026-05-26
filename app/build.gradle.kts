@@ -23,11 +23,18 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8 elimina código muerto, ofusca y optimiza el APK final
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        debug {
+            // Identifica claramente el build de desarrollo
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-DEBUG"
         }
     }
     compileOptions {
@@ -36,6 +43,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true   // Habilita BuildConfig.DEBUG para el interceptor de logging
     }
 }
 
@@ -61,4 +69,7 @@ dependencies {
     // Retrofit y Gson (Para hacer las peticiones HTTP al servidor semántico)
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+
+    // HttpLoggingInterceptor: SOLO en debug. R8 lo elimina completamente del APK release.
+    debugImplementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 }

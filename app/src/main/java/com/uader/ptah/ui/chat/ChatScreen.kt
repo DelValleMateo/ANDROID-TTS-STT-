@@ -34,9 +34,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.uader.ptah.ui.theme.PtahSpacing
+import com.uader.ptah.ui.theme.screenHorizontalPadding
+
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.runtime.remember
+import kotlinx.coroutines.flow.collectLatest
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,16 +59,34 @@ fun ChatScreen(
     val uiState = viewModel.uiState
     val inputText = viewModel.inputText
     val listState = rememberLazyListState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.lastIndex)
+    // FIX: usar el canal de eventos en lugar de LaunchedEffect(uiState).
+    // Problema del código anterior: si dos errores consecutivos tenían el MISMO
+    // mensaje, LaunchedEffect no se re-ejecutaba porque su "key" (uiState) no
+    // cambiaba de forma estructural suficiente. El canal garantiza entrega por
+    // cada evento emitido, independientemente del contenido.
+    LaunchedEffect(Unit) {
+        viewModel.userEvents.collectLatest { event ->
+            when (event) {
+                is UserEvent.ShowError -> {
+                    val result = snackbarHostState.showSnackbar(
+                        message = event.message,
+                        actionLabel = "Reintentar",
+                        duration = SnackbarDuration.Long
+                    )
+                    if (result == SnackbarResult.ActionPerformed) {
+                        viewModel.retryLastQuery()
+                    }
+                }
+            }
         }
     }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -101,7 +130,10 @@ private fun ChatContent(
         modifier = Modifier
             .fillMaxSize()
             .padding(paddingValues)
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            // Uso del modifier centralizado: reemplaza padding(horizontal=16, vertical=12)
+            // hardcodeados. Si se necesita cambiar el margen global, se toca Spacing.kt.
+            .screenHorizontalPadding()
+            .padding(vertical = PtahSpacing.screenVertical)
     ) {
         Box(
             modifier = Modifier
@@ -245,15 +277,32 @@ private fun InputRow(
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                // ACCESIBILIDAD: TalkBack leerá esto como descripción del campo.
+                // Al combinar semantics{} con el placeholder visual, los usuarios
+                // videntes ven el placeholder y TalkBack anuncia la descripción.
+                .semantics {
+                    contentDescription = "Campo de texto. Escribí tu consulta normativa aquí."
+                },
             placeholder = { Text("Escribí tu consulta...") },
+            label = { Text("Consulta") },   // Label visible siempre: mejora accesibilidad visual
             singleLine = true,
             enabled = true
         )
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(PtahSpacing.itemGap))
         Button(
             onClick = onSend,
             enabled = sendEnabled,
+            // ACCESIBILIDAD: describe la acción exacta del botón, no solo su etiqueta.
+            // TalkBack anunciará: "Enviar consulta. Botón."
+            modifier = Modifier.semantics {
+                contentDescription = if (sendEnabled) {
+                    "Enviar consulta al asistente"
+                } else {
+                    "Botón Enviar deshabilitado. Escribí una consulta primero."
+                }
+            },
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary

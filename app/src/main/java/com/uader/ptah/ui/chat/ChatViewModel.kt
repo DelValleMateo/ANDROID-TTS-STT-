@@ -10,8 +10,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.uader.ptah.data.PtahRepository
+import com.uader.ptah.data.network.ApiException
 import com.uader.ptah.di.ServiceLocator
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import java.io.IOException
 
 class ChatViewModel(
     private val repository: PtahRepository
@@ -26,6 +30,19 @@ class ChatViewModel(
     var inputText by mutableStateOf("")
         private set
 
+    private var lastQuery: String? = null
+
+    /**
+     * Canal de eventos de UI de "disparo único" (one-shot).
+     * Usar [userEvents] en la UI para colectar.
+     *
+     * Razón: LaunchedEffect(uiState) NO dispara si el error tiene el mismo
+     * mensaje que el anterior (la key no cambia). Un Channel garantiza entrega
+     * individual para CADA error, independientemente del contenido.
+     */
+    private val _userEvents = Channel<UserEvent>(capacity = Channel.BUFFERED)
+    val userEvents = _userEvents.receiveAsFlow()
+
     fun onTextChanged(text: String) {
         inputText = text
     }
@@ -37,36 +54,67 @@ class ChatViewModel(
 
         _messages.add(ChatMessage(ChatMessage.Author.USER, clean))
         inputText = ""
+        executeSearch(clean)
+    }
+
+    fun retryLastQuery() {
+        lastQuery?.let { 
+            Log.d(TAG, "Reintentando última consulta: $it")
+            executeSearch(it) 
+        }
+    }
+
+    private fun executeSearch(query: String) {
+        lastQuery = query
         uiState = ChatUiState.Loading
 
         viewModelScope.launch {
             val startedAt = SystemClock.elapsedRealtime()
-            Log.d(TAG, "Inicio de consulta al Mock")
+            Log.d(TAG, "Inicio de consulta al Mock: $query")
 
-            repository.searchRegulations(clean)
-                .onSuccess { results ->
-                    val latencyMs = SystemClock.elapsedRealtime() - startedAt
-                    Log.d(TAG, "Fin de consulta al Mock. Latencia: ${latencyMs}ms")
+            try {
+                repository.searchRegulations(query)
+                    .onSuccess { results ->
+                        val latencyMs = SystemClock.elapsedRealtime() - startedAt
+                        Log.d(TAG, "Fin de consulta al Mock. Latencia: ${latencyMs}ms")
 
-                    val reply = if (results.isEmpty()) {
-                        "Sin resultados.\nLatencia: ${latencyMs} ms"
-                    } else {
-                        results.joinToString(separator = "\n\n") { article ->
-                            "${article.title}\n${article.content}"
+                        val reply = if (results.isEmpty()) {
+                            "Sin resultados.\nLatencia: ${latencyMs} ms"
+                        } else {
+                            results.joinToString(separator = "\n\n") { article ->
+                                "${article.title}\n${article.content}"
+                            }
                         }
+                        _messages.add(ChatMessage(ChatMessage.Author.SYSTEM, reply))
+                        uiState = ChatUiState.Success(results, latencyMs)
                     }
-                    _messages.add(ChatMessage(ChatMessage.Author.SYSTEM, reply))
-                    uiState = ChatUiState.Success(results, latencyMs)
-                }
-                .onFailure { throwable ->
-                    val latencyMs = SystemClock.elapsedRealtime() - startedAt
-                    val message = throwable.message ?: "Error desconocido"
-                    Log.e(TAG, "Error en consulta al Mock tras ${latencyMs}ms", throwable)
-                    _messages.add(
-                        ChatMessage(ChatMessage.Author.SYSTEM, "Error: $message")
-                    )
-                    uiState = ChatUiState.Error(message, latencyMs)
-                }
+                    .onFailure { throwable ->
+                        handleFailure(throwable, startedAt)
+                    }
+            } catch (e: Exception) {
+                // Captura de excepciones que podrían ocurrir fuera del runCatching del repo
+                handleFailure(e, startedAt)
+            }
+        }
+    }
+
+    private fun handleFailure(throwable: Throwable, startedAt: Long) {
+        val latencyMs = SystemClock.elapsedRealtime() - startedAt
+        val message = when (throwable) {
+            is ApiException -> throwable.message ?: "Error de servidor"
+            is IOException -> "Error de conexión: Revisa tu internet"
+            else -> throwable.message ?: "Error inesperado"
+        }
+
+        Log.e(TAG, "Error en consulta al Mock tras ${latencyMs}ms: $message", throwable)
+
+        // Actualizar el estado visual (banner de error en StatusRow)
+        uiState = ChatUiState.Error(message, latencyMs)
+
+        // Emitir evento de Snackbar por el canal: garantiza que la UI lo reciba
+        // incluso si el mensaje anterior era idéntico (fix al bug de LaunchedEffect).
+        viewModelScope.launch {
+            _userEvents.send(UserEvent.ShowError(message))
         }
     }
 

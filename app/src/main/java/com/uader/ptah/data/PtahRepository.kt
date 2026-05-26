@@ -21,28 +21,26 @@ class PtahRepositoryImpl(
         return runCatching {
             Log.d(TAG, "Enviando consulta al Mock: $query")
             val response = apiService.searchRegulations(SemanticSearchRequest(query))
-            if (response.isSuccessful) {
-                val body = response.body()
-                    ?: throw IllegalStateException("Respuesta vacía del Mock")
+            
+            // Si llegamos acá es porque el Interceptor dejó pasar la respuesta (isSuccessful == true)
+            val body = response.body()
+                ?: throw IllegalStateException("Respuesta vacía del Mock")
 
-                if (!body.status.equals("exito", ignoreCase = true)) {
-                    throw IllegalStateException(body.message ?: "El Mock devolvió estado inválido")
-                }
-
-                val articles = body.results.orEmpty().map { dto ->
-                    NormativeArticle(
-                        id = dto.articleId.orEmpty(),
-                        title = dto.title.orEmpty(),
-                        content = dto.content.orEmpty(),
-                        relevance = dto.relevanceScore
-                    )
-                }
-
-                Log.d(TAG, "Respuesta exitosa del Mock: ${articles.size} artículo(s)")
-                articles
-            } else {
-                throw IllegalStateException("HTTP ${response.code()}: ${response.message()}")
+            if (!body.status.equals("exito", ignoreCase = true)) {
+                throw IllegalStateException(body.message ?: "El Mock devolvió estado inválido")
             }
+
+            val articles = body.results.orEmpty().map { dto ->
+                NormativeArticle(
+                    id = dto.articleId.orEmpty(),
+                    title = dto.title.orEmpty(),
+                    content = dto.content.orEmpty(),
+                    relevance = dto.relevanceScore
+                )
+            }
+
+            Log.d(TAG, "Respuesta exitosa del Mock: ${articles.size} artículo(s)")
+            articles
         }
     }
 
