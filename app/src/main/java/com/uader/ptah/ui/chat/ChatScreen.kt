@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,12 +27,17 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -41,12 +47,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.uader.ptah.ui.theme.PtahSpacing
 import com.uader.ptah.ui.theme.screenHorizontalPadding
-
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarResult
-import androidx.compose.runtime.remember
 import kotlinx.coroutines.flow.collectLatest
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -61,11 +61,6 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // FIX: usar el canal de eventos en lugar de LaunchedEffect(uiState).
-    // Problema del código anterior: si dos errores consecutivos tenían el MISMO
-    // mensaje, LaunchedEffect no se re-ejecutaba porque su "key" (uiState) no
-    // cambiaba de forma estructural suficiente. El canal garantiza entrega por
-    // cada evento emitido, independientemente del contenido.
     LaunchedEffect(Unit) {
         viewModel.userEvents.collectLatest { event ->
             when (event) {
@@ -80,6 +75,12 @@ fun ChatScreen(
                     }
                 }
             }
+        }
+    }
+
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) {
+            listState.animateScrollToItem(messages.lastIndex)
         }
     }
 
@@ -122,7 +123,7 @@ private fun ChatContent(
     input: String,
     onInputChange: (String) -> Unit,
     onSend: () -> Unit,
-    listState: androidx.compose.foundation.lazy.LazyListState
+    listState: LazyListState
 ) {
     val isLoading = uiState is ChatUiState.Loading
 
@@ -130,8 +131,6 @@ private fun ChatContent(
         modifier = Modifier
             .fillMaxSize()
             .padding(paddingValues)
-            // Uso del modifier centralizado: reemplaza padding(horizontal=16, vertical=12)
-            // hardcodeados. Si se necesita cambiar el margen global, se toca Spacing.kt.
             .screenHorizontalPadding()
             .padding(vertical = PtahSpacing.screenVertical)
     ) {
@@ -176,13 +175,13 @@ private fun EmptyHistoryPlaceholder() {
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = "Aún no hay mensajes",
+                text = "Aun no hay mensajes",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onBackground
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "Escribí una consulta y tocá Enviar.",
+                text = "Escribi una consulta y toca Enviar.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -193,10 +192,16 @@ private fun EmptyHistoryPlaceholder() {
 @Composable
 private fun MessageBubble(message: ChatMessage) {
     val isUser = message.author == ChatMessage.Author.USER
-    val bg = if (isUser) MaterialTheme.colorScheme.primaryContainer
-    else MaterialTheme.colorScheme.surfaceVariant
-    val fg = if (isUser) MaterialTheme.colorScheme.onPrimaryContainer
-    else MaterialTheme.colorScheme.onSurfaceVariant
+    val bg = if (isUser) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val fg = if (isUser) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
     val alignment = if (isUser) Alignment.End else Alignment.Start
 
     Column(
@@ -237,18 +242,16 @@ private fun StatusRow(state: ChatUiState) {
             Spacer(Modifier.width(8.dp))
             Text("Cargando...", style = MaterialTheme.typography.bodySmall)
         }
+
         is ChatUiState.Success -> Text(
-            text = if (state.results.isEmpty()) {
-                "Consulta finalizada sin resultados. Latencia: ${state.latencyMs} ms."
-            } else {
-                "Consulta finalizada: ${state.results.size} resultado(s). Latencia: ${state.latencyMs} ms."
-            },
+            text = "Respuesta recibida. Latencia: ${state.latencyMs} ms.",
             color = MaterialTheme.colorScheme.onPrimaryContainer,
             modifier = Modifier
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.primaryContainer)
                 .padding(8.dp)
         )
+
         is ChatUiState.Error -> Text(
             text = state.latencyMs?.let { "Error: ${state.message}. Latencia: ${it} ms." }
                 ?: "Error: ${state.message}",
@@ -279,28 +282,22 @@ private fun InputRow(
             onValueChange = onValueChange,
             modifier = Modifier
                 .weight(1f)
-                // ACCESIBILIDAD: TalkBack leerá esto como descripción del campo.
-                // Al combinar semantics{} con el placeholder visual, los usuarios
-                // videntes ven el placeholder y TalkBack anuncia la descripción.
                 .semantics {
-                    contentDescription = "Campo de texto. Escribí tu consulta normativa aquí."
+                    contentDescription = "Campo de texto. Escribi tu consulta normativa aqui."
                 },
-            placeholder = { Text("Escribí tu consulta...") },
-            label = { Text("Consulta") },   // Label visible siempre: mejora accesibilidad visual
-            singleLine = true,
-            enabled = true
+            placeholder = { Text("Escribi tu consulta...") },
+            label = { Text("Consulta") },
+            singleLine = true
         )
         Spacer(Modifier.width(PtahSpacing.itemGap))
         Button(
             onClick = onSend,
             enabled = sendEnabled,
-            // ACCESIBILIDAD: describe la acción exacta del botón, no solo su etiqueta.
-            // TalkBack anunciará: "Enviar consulta. Botón."
             modifier = Modifier.semantics {
                 contentDescription = if (sendEnabled) {
                     "Enviar consulta al asistente"
                 } else {
-                    "Botón Enviar deshabilitado. Escribí una consulta primero."
+                    "Boton Enviar deshabilitado. Escribi una consulta primero."
                 }
             },
             colors = ButtonDefaults.buttonColors(

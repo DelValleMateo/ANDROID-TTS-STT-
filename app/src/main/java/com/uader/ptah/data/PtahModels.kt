@@ -2,37 +2,43 @@ package com.uader.ptah.data
 
 import com.google.gson.annotations.SerializedName
 
-// Request esperado por el Mock: {"consulta": "..."}.
-data class SemanticSearchRequest(
-    @SerializedName("consulta")
+data class QueryRequest(
     val query: String
 )
 
-// Modelo de dominio usado por el ViewModel y la UI.
-data class NormativeArticle(
-    val id: String,
-    val title: String,
-    val content: String,
-    val relevance: Double? = null
+data class QueryResponse(
+    val answer: String
 )
 
-// DTOs de red según CONTRATO_API.md y mock_server/app_mock.py.
-data class SemanticSearchResponse(
-    @SerializedName("estado")
-    val status: String?,
-    @SerializedName("mensaje")
-    val message: String?,
-    @SerializedName("resultados")
-    val results: List<SemanticArticleDto>?
+data class GoogleAiRequest(
+    @SerializedName("systemInstruction")
+    val systemInstruction: GoogleAiContent,
+    val contents: List<GoogleAiContent>,
+    @SerializedName("generationConfig")
+    val generationConfig: GoogleAiGenerationConfig = GoogleAiGenerationConfig()
 )
 
-data class SemanticArticleDto(
-    @SerializedName("id_articulo")
-    val articleId: String?,
-    @SerializedName("titulo")
-    val title: String?,
-    @SerializedName("contenido")
-    val content: String?,
-    @SerializedName("score_relevancia")
-    val relevanceScore: Double?
+data class GoogleAiGenerationConfig(
+    val temperature: Double = 0.2,
+    @SerializedName("maxOutputTokens")
+    val maxOutputTokens: Int = 512
+)
+
+data class GoogleAiContent(
+    val role: String? = null,
+    val parts: List<GoogleAiPart>
+)
+
+data class GoogleAiPart(
+    val text: String
+)
+
+data class GoogleAiResponse(
+    val candidates: List<GoogleAiCandidate>?
+)
+
+data class GoogleAiCandidate(
+    val content: GoogleAiContent?,
+    @SerializedName("finishReason")
+    val finishReason: String? = null
 )

@@ -1,12 +1,9 @@
 package com.uader.ptah.ui.chat
 
-import com.uader.ptah.data.NormativeArticle
-
 sealed interface ChatUiState {
     data object Idle : ChatUiState
     data object Loading : ChatUiState
     data class Success(
-        val results: List<NormativeArticle>,
         val latencyMs: Long
     ) : ChatUiState
 

@@ -16,7 +16,7 @@ object ServiceLocator {
 
     val ptahRepository: PtahRepository by lazy {
         PtahRepositoryImpl(
-            apiService = RetrofitProvider.apiService
+            apiService = RetrofitProvider.googleAiApiService
         )
     }
 }
