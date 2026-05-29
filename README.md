@@ -23,29 +23,29 @@ No se implementan en esta etapa reconocimiento de voz, sintesis de voz, tests av
 - Material 3.
 - MVVM.
 - Retrofit.
-- Google IA como integracion temporal.
+- Groq API como integracion temporal compatible con OpenAI Chat Completions.
 
 ## Arquitectura
 
 El flujo principal de la consulta textual es:
 
 ```text
-ChatScreen -> ChatViewModel -> PtahRepository -> GoogleAiApiService/RetrofitProvider -> Google IA
+ChatScreen -> ChatViewModel -> PtahRepository -> GroqApiService/RetrofitProvider -> Groq API
 ```
 
 - `ChatScreen`: pantalla Compose que muestra historial, input, carga y errores.
 - `ChatViewModel`: administra estado de UI, historial conversacional, envio de consultas y latencia.
-- `PtahRepository`: arma el prompt base del Proyecto PTAH, llama a la API y devuelve una respuesta textual limpia.
-- `GoogleAiApiService` y `RetrofitProvider`: capa de red con Retrofit, API key, timeouts y manejo basico de errores.
+- `PtahRepository`: arma el request Chat Completions, llama a la API y devuelve una respuesta textual limpia.
+- `GroqApiService` y `RetrofitProvider`: capa de red con Retrofit, API key, timeouts y manejo basico de errores.
 
-Google IA se utiliza provisoriamente para validar el flujo textual de consulta-respuesta hasta conectar el motor semantico real de PTAH.
+Groq se utiliza provisoriamente para validar el flujo textual de consulta-respuesta hasta conectar el motor semantico real de PTAH.
 
 ## Configuracion de API Key
 
-Agregar la clave de Google IA en el archivo `local.properties` de la raiz del proyecto:
+Agregar la clave de Groq en el archivo `local.properties` de la raiz del proyecto:
 
 ```properties
-GOOGLE_AI_API_KEY=TU_API_KEY_ACA
+GROQ_API_KEY=TU_API_KEY_ACA
 ```
 
 No subir claves reales al repositorio. El archivo `local.properties` esta ignorado por Git. Tambien se ignoran archivos `.env`, `secrets.properties`, keystores y archivos similares.
@@ -55,7 +55,7 @@ Para un entorno productivo, la recomendacion es que la app consulte un backend p
 ## Como ejecutar el proyecto
 
 1. Abrir el proyecto en Android Studio.
-2. Configurar `GOOGLE_AI_API_KEY` en `local.properties`.
+2. Configurar `GROQ_API_KEY` en `local.properties`.
 3. Sincronizar Gradle.
 4. Ejecutar el modulo `:app` en un emulador o dispositivo Android.
 
@@ -64,7 +64,7 @@ Si se compila desde terminal, verificar que `JAVA_HOME` apunte a una instalacion
 ## Estado actual
 
 - Consulta textual desde la pantalla principal.
-- Respuesta textual mediante Google IA.
+- Respuesta textual mediante Groq API.
 - Historial conversacional con mensajes de usuario y sistema.
 - Estado de carga durante la consulta.
 - Manejo de errores visible en pantalla.

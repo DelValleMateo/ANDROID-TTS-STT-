@@ -40,12 +40,12 @@ fun localProperty(name: String): String? {
         }
 }
 
-val googleAiApiKey = localProperty("GOOGLE_AI_API_KEY")
-    ?: providers.gradleProperty("GOOGLE_AI_API_KEY").orNull?.trim()?.takeIf { it.isNotBlank() }
+val groqApiKey = localProperty("GROQ_API_KEY")
+    ?: providers.gradleProperty("GROQ_API_KEY").orNull?.trim()?.takeIf { it.isNotBlank() }
     ?: ""
 
-logger.lifecycle("GOOGLE_AI_API_KEY configurada: ${googleAiApiKey.isNotBlank()}")
-logger.lifecycle("Longitud de GOOGLE_AI_API_KEY: ${googleAiApiKey.length} caracteres")
+logger.lifecycle("GROQ_API_KEY configurada: ${groqApiKey.isNotBlank()}")
+logger.lifecycle("Longitud de GROQ_API_KEY: ${groqApiKey.length} caracteres")
 
 android {
     namespace = "com.uader.ptah"
@@ -63,8 +63,7 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "GOOGLE_AI_API_KEY", "\"${googleAiApiKey.escapeForBuildConfig()}\"")
-        buildConfigField("String", "GOOGLE_AI_MODEL", "\"gemini-2.0-flash\"")
+        buildConfigField("String", "GROQ_API_KEY", "\"${groqApiKey.escapeForBuildConfig()}\"")
     }
 
     buildTypes {
@@ -112,7 +111,7 @@ dependencies {
 
     implementation(libs.androidx.lifecycle.viewmodel.compose)
 
-    // Retrofit y Gson para hacer peticiones HTTP a Google IA.
+    // Retrofit y Gson para hacer peticiones HTTP a Groq.
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
 

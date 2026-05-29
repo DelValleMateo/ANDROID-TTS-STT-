@@ -14,7 +14,7 @@ Para la entrega parcial de junio/julio se entrega un prototipo funcional centrad
 - Manejo de estados de carga, respuesta y error.
 - Arquitectura base organizada para poder evolucionar el proyecto.
 
-Actualmente Google IA/Gemini cumple un rol temporal: se usa para validar el flujo conversacional textual de consulta-respuesta mientras se prepara o conecta el motor semantico real de PTAH. No debe interpretarse como reemplazo definitivo del backend semantico institucional, sino como una integracion provisoria para demostrar el comportamiento completo del cliente movil.
+Actualmente Groq API cumple un rol temporal: se usa para validar el flujo conversacional textual de consulta-respuesta mientras se prepara o conecta el motor semantico real de PTAH. No debe interpretarse como reemplazo definitivo del backend semantico institucional, sino como una integracion provisoria para demostrar el comportamiento completo del cliente movil.
 
 ## 2. Alcance de la entrega parcial junio/julio
 
@@ -47,12 +47,12 @@ Queda para etapas posteriores:
 - Estado Compose: el proyecto usa `mutableStateOf` y `mutableStateListOf`, no `StateFlow` para el estado principal. Estos estados disparan recomposicion automatica en Compose.
 - Channel y Flow: `Channel<UserEvent>` se expone con `receiveAsFlow()` para eventos de una sola vez, como mostrar un Snackbar de error.
 - Coroutines: `viewModelScope.launch` ejecuta la consulta a la API sin bloquear la UI.
-- Retrofit: cliente HTTP usado para definir y ejecutar la llamada a Google IA.
+- Retrofit: cliente HTTP usado para definir y ejecutar la llamada a Groq API.
 - Gson: `converter-gson` convierte JSON de request/response entre Kotlin y la API. Tambien se usan anotaciones `@SerializedName`.
 - OkHttp: cliente HTTP usado por Retrofit, con interceptores para API key, latencia, logging y errores.
-- BuildConfig: mecanismo de Gradle para exponer constantes al codigo Kotlin, como `GOOGLE_AI_API_KEY` y `GOOGLE_AI_MODEL`.
+- BuildConfig: mecanismo de Gradle para exponer constantes al codigo Kotlin, como `GROQ_API_KEY`.
 - local.properties: archivo local no versionado donde se configura la API key sin subirla al repositorio.
-- Google IA / Gemini API: API temporal usada para generar una respuesta textual y validar el flujo conversacional.
+- Groq API: API temporal compatible con OpenAI Chat Completions usada para generar una respuesta textual y validar el flujo conversacional.
 
 ## 4. Estructura general del proyecto
 
@@ -113,7 +113,7 @@ El modulo real de la aplicacion es `:app`. Esto se confirma en `settings.gradle.
 
 `PtahApp/` parece ser una copia o prototipo antiguo, con paquete `com.example.app`. No forma parte del build principal porque no esta incluido en el `settings.gradle.kts` de la raiz. No se borra, pero para la presentacion se debe explicar que el modulo activo es `:app`.
 
-`mock_server/` contiene un servidor de prueba previo para el contrato semantico local. Actualmente el flujo principal del modulo `:app` consulta Google IA; el mock queda como material historico o de referencia.
+`mock_server/` contiene un servidor de prueba previo para el contrato semantico local. Actualmente el flujo principal del modulo `:app` consulta Groq API; el mock queda como material historico o de referencia.
 
 ## 5. Arquitectura utilizada
 
@@ -128,25 +128,25 @@ ChatViewModel
     ↓
 PtahRepository
     ↓
-GoogleAiApiService / RetrofitProvider
+GroqApiService / RetrofitProvider
     ↓
-Google IA
+Groq API
 ```
 
 Responsabilidades:
 
 - UI: `ChatScreen` muestra la pantalla, captura texto, renderiza mensajes, carga y errores.
 - ViewModel: `ChatViewModel` maneja estado, historial, input, loading, errores, reintento y latencia.
-- Repository: `PtahRepositoryImpl` centraliza la logica de consulta, arma el prompt base PTAH y limpia la respuesta recibida.
-- Network/API Service: `GoogleAiApiService` define el endpoint HTTP y `RetrofitProvider` configura Retrofit/OkHttp.
-- DTOs/Models: `PtahModels.kt` contiene los modelos para request y response de Google IA y la respuesta interna `QueryResponse`.
+- Repository: `PtahRepositoryImpl` centraliza la logica de consulta, arma el request para Groq y limpia la respuesta recibida.
+- Network/API Service: `GroqApiService` define el endpoint HTTP y `RetrofitProvider` configura Retrofit/OkHttp.
+- DTOs/Models: `PtahModels.kt` contiene los modelos para request y response de Groq API y la respuesta interna `QueryResponse`.
 - DI manual: `ServiceLocator` centraliza la creacion del repositorio y del servicio de red.
 
 Esta separacion ayuda porque:
 
 - Ordena el codigo por responsabilidad.
 - Evita que la UI conozca detalles de Retrofit o JSON.
-- Permite reemplazar Google IA por el backend real PTAH cambiando principalmente la capa de datos/red.
+- Permite reemplazar Groq API por el backend real PTAH cambiando principalmente la capa de datos/red.
 - Facilita explicar, mantener y probar cada parte de forma aislada.
 
 ## 6. Flujo completo de una consulta
@@ -163,12 +163,12 @@ Paso a paso:
 8. El ViewModel cambia `uiState` a `ChatUiState.Loading`.
 9. El ViewModel inicia la medicion de latencia con `SystemClock.elapsedRealtime()`.
 10. El ViewModel llama a `repository.ask(query)` dentro de `viewModelScope.launch`.
-11. El Repository arma un `GoogleAiRequest` con el prompt base PTAH y la consulta del usuario.
-12. El Repository llama a `GoogleAiApiService.generateContent`.
-13. Retrofit usa `RetrofitProvider` para enviar la request a Google IA.
-14. `ApiKeyInterceptor` agrega la API key en el header `x-goog-api-key`.
-15. Google IA devuelve una respuesta JSON.
-16. El Repository extrae el texto desde `candidates -> content -> parts`.
+11. El Repository arma un `GroqChatCompletionRequest` con el modelo y un mensaje `user` con la consulta del usuario.
+12. El Repository llama a `GroqApiService.createChatCompletion`.
+13. Retrofit usa `RetrofitProvider` para enviar la request a Groq API.
+14. `ApiKeyInterceptor` agrega la API key en el header `Authorization: Bearer`.
+15. Groq API devuelve una respuesta JSON.
+16. El Repository extrae el texto desde `choices[0].message.content`.
 17. El Repository devuelve `QueryResponse(answer)`.
 18. El ViewModel calcula la latencia final.
 19. El ViewModel agrega un `ChatMessage` del sistema al historial.
@@ -189,12 +189,12 @@ ChatViewModel
   historial + loading + latencia
       ↓
 PtahRepository
-  prompt PTAH + parsing de respuesta
+  request Groq + parsing de respuesta
       ↓
-GoogleAiApiService / RetrofitProvider
+GroqApiService / RetrofitProvider
   HTTP + API key + errores
       ↓
-Google IA
+Groq API
   respuesta textual
       ↓
 ChatViewModel
@@ -236,9 +236,8 @@ Contiene:
 - `applicationId = "com.uader.ptah"`.
 - `compileSdk`, `minSdk` y `targetSdk`.
 - `buildFeatures { compose = true; buildConfig = true }`.
-- Lectura de `GOOGLE_AI_API_KEY` desde `local.properties`.
-- Exposicion de `BuildConfig.GOOGLE_AI_API_KEY`.
-- Exposicion de `BuildConfig.GOOGLE_AI_MODEL`.
+- Lectura de `GROQ_API_KEY` desde `local.properties`.
+- Exposicion de `BuildConfig.GROQ_API_KEY`.
 - Dependencias de Compose, Material 3, ViewModel, Retrofit, Gson y logging de OkHttp.
 
 No hardcodea una clave real. Solo genera una constante a partir del valor local.
@@ -249,7 +248,7 @@ Responsabilidad: manifiesto Android de la app.
 
 Contiene:
 
-- Permiso `android.permission.INTERNET`, necesario para llamar a Google IA.
+- Permiso `android.permission.INTERNET`, necesario para llamar a Groq API.
 - Declaracion de `MainActivity` como activity principal.
 - Intent filter `MAIN` y `LAUNCHER`.
 - Tema `Theme.PTAH`.
@@ -337,9 +336,9 @@ Contiene:
 - Interfaz `PtahRepository`.
 - Implementacion `PtahRepositoryImpl`.
 - Metodo `ask(query: String): Result<QueryResponse>`.
-- Prompt base del Proyecto PTAH.
+- Request Chat Completions para Groq API.
 
-Relacion: recibe la consulta desde el ViewModel, arma el `GoogleAiRequest`, llama al API service y devuelve texto limpio.
+Relacion: recibe la consulta desde el ViewModel, arma el `GroqChatCompletionRequest`, llama al API service y devuelve texto limpio.
 
 ### `app/src/main/java/com/uader/ptah/data/PtahApiService.kt`
 
@@ -347,11 +346,11 @@ Responsabilidad: contrato HTTP de Retrofit.
 
 Contiene:
 
-- Interfaz `GoogleAiApiService`.
-- Metodo suspend `generateContent`.
-- Endpoint relativo `v1beta/models/{model}:generateContent`.
+- Interfaz `GroqApiService`.
+- Metodo suspend `createChatCompletion`.
+- Endpoint relativo `openai/v1/chat/completions`.
 
-Relacion: usado por `PtahRepositoryImpl` para enviar consultas a Google IA.
+Relacion: usado por `PtahRepositoryImpl` para enviar consultas a Groq API.
 
 ### `app/src/main/java/com/uader/ptah/data/network/RetrofitProvider.kt`
 
@@ -360,7 +359,7 @@ Responsabilidad: configurar red.
 Contiene:
 
 - `RetrofitProvider`.
-- `BASE_URL = "https://generativelanguage.googleapis.com/"`.
+- `BASE_URL = "https://api.groq.com/"`.
 - Cliente `OkHttpClient`.
 - `ApiKeyInterceptor`.
 - `LatencyInterceptor`.
@@ -377,12 +376,10 @@ Contiene:
 
 - `QueryRequest`: modelo simple de entrada interna, actualmente no es central en el flujo final.
 - `QueryResponse`: respuesta interna que contiene `answer`.
-- `GoogleAiRequest`.
-- `GoogleAiGenerationConfig`.
-- `GoogleAiContent`.
-- `GoogleAiPart`.
-- `GoogleAiResponse`.
-- `GoogleAiCandidate`.
+- `GroqChatCompletionRequest`.
+- `GroqMessage`.
+- `GroqChatCompletionResponse`.
+- `GroqChoice`.
 
 Relacion: el Repository usa estos modelos para armar la request y parsear la response.
 
@@ -434,7 +431,7 @@ Responsabilidad: configuracion local de la maquina.
 Debe contener:
 
 ```properties
-GOOGLE_AI_API_KEY=TU_API_KEY_ACA
+GROQ_API_KEY=TU_API_KEY_ACA
 ```
 
 No se debe subir a GitHub. No se debe pegar una clave real en documentacion.
@@ -443,7 +440,7 @@ No se debe subir a GitHub. No se debe pegar una clave real en documentacion.
 
 Responsabilidad: documentacion historica o auxiliar del desarrollo. `CONTRATO_API.md` describe el contrato anterior del mock local. `GEMINI.md` contiene notas previas del sprint de manejo de errores.
 
-No representan por si solos el flujo final actual, que en el modulo `:app` usa Google IA.
+No representan por si solos el flujo final actual, que en el modulo `:app` usa Groq API.
 
 ## 8. Modelos y estados de la aplicacion
 
@@ -474,38 +471,37 @@ Esto permite que Compose reaccione cuando se agregan mensajes.
 
 `QueryResponse` representa la respuesta interna final que necesita la UI: un texto `answer`.
 
-`GoogleAiRequest` representa el JSON enviado a Google IA:
+`GroqChatCompletionRequest` representa el JSON enviado a Groq API:
 
-- `systemInstruction`: prompt base PTAH.
-- `contents`: contenido del usuario.
-- `generationConfig`: parametros simples de generacion, como temperatura y maximo de tokens.
+- `model`: `llama-3.1-8b-instant`.
+- `messages`: lista de mensajes enviados a la API, con `role = "user"` y `content` tomado del input del usuario.
 
-`GoogleAiResponse` representa el JSON devuelto por Google IA. El texto se extrae desde:
+`GroqChatCompletionResponse` representa el JSON devuelto por Groq API. El texto se extrae desde:
 
 ```text
-candidates -> first -> content -> parts -> text
+choices[0].message.content
 ```
 
 Si no hay texto o viene vacio, se devuelve un error controlado.
 
-## 9. Comunicacion con Google IA
+## 9. Comunicacion con Groq API
 
 La base URL configurada es:
 
 ```text
-https://generativelanguage.googleapis.com/
+https://api.groq.com/
 ```
 
 El endpoint relativo definido en Retrofit es:
 
 ```text
-v1beta/models/{model}:generateContent
+openai/v1/chat/completions
 ```
 
-El modelo se configura en Gradle como:
+El modelo se configura en `PtahRepositoryImpl` como:
 
 ```text
-BuildConfig.GOOGLE_AI_MODEL = "gemini-2.0-flash"
+model = "llama-3.1-8b-instant"
 ```
 
 Retrofit se configura en `RetrofitProvider` con:
@@ -516,23 +512,22 @@ Retrofit se configura en `RetrofitProvider` con:
 - Interceptor de API key.
 - Interceptor de latencia.
 - Interceptor de errores.
-- Logging HTTP en debug con header `x-goog-api-key` redactado.
+- Logging HTTP en debug con header `Authorization` redactado.
 
 La API key se envia como header:
 
 ```text
-x-goog-api-key: <clave local>
+Authorization: Bearer <clave local>
 ```
 
 No se muestra ni se hardcodea en el codigo fuente. En logs solo se muestra si esta configurada y su longitud.
 
 La request se arma en `PtahRepositoryImpl` con:
 
-- Prompt base que posiciona al asistente como asistente del Proyecto PTAH.
-- Consulta textual del usuario.
-- Configuracion de generacion simple.
+- Modelo `llama-3.1-8b-instant`.
+- Mensaje `user` con la consulta textual del usuario.
 
-Si Google IA devuelve respuesta vacia, el Repository lanza un error controlado: "No se obtuvo una respuesta valida."
+Si Groq API devuelve respuesta vacia, el Repository lanza un error controlado: "No se obtuvo una respuesta valida."
 
 Significado de errores:
 
@@ -540,7 +535,7 @@ Significado de errores:
 - 401: no autorizado; suele indicar API key invalida.
 - 403: acceso prohibido; puede indicar restricciones o permisos de API key.
 - 429: limite de uso alcanzado; hay que esperar o revisar cuotas.
-- 500 a 599: error del servidor de Google IA.
+- 500 a 599: error del servidor de Groq API.
 
 La clave no se hardcodea porque seria inseguro, dificil de rotar y riesgoso si el repositorio se comparte. Para prototipo se usa `local.properties`; para produccion conviene que la app consulte un backend propio.
 
@@ -551,16 +546,16 @@ En la raiz del proyecto, al mismo nivel que `settings.gradle.kts`, `build.gradle
 Ejemplo:
 
 ```properties
-GOOGLE_AI_API_KEY=TU_API_KEY_ACA
+GROQ_API_KEY=TU_API_KEY_ACA
 ```
 
 Funcionamiento:
 
 1. Gradle lee `rootProject.file("local.properties")`.
-2. Busca exactamente la propiedad `GOOGLE_AI_API_KEY`.
+2. Busca exactamente la propiedad `GROQ_API_KEY`.
 3. Recorta espacios y evita usar valores vacios.
-4. Expone el valor mediante `BuildConfig.GOOGLE_AI_API_KEY`.
-5. El codigo Kotlin lee `BuildConfig.GOOGLE_AI_API_KEY`.
+4. Expone el valor mediante `BuildConfig.GROQ_API_KEY`.
+5. El codigo Kotlin lee `BuildConfig.GROQ_API_KEY`.
 6. `ApiKeyInterceptor` valida si esta configurada.
 7. Si falta, la app muestra un error controlado.
 
@@ -586,7 +581,7 @@ Errores controlados:
 - Error 401: API key invalida o no autorizada.
 - Error 403: permisos o restricciones de la API key.
 - Error 429: limite de uso o cuota alcanzada.
-- Error 500 a 599: error del servidor de Google IA.
+- Error 500 a 599: error del servidor de Groq API.
 - Respuesta vacia: el Repository detecta que no hay texto util.
 - Error inesperado: el ViewModel usa un mensaje generico si no reconoce el caso.
 
@@ -671,8 +666,7 @@ Dependencias principales:
 
 BuildConfig:
 
-- `GOOGLE_AI_API_KEY`: se genera desde `local.properties`.
-- `GOOGLE_AI_MODEL`: define el modelo Gemini usado.
+- `GROQ_API_KEY`: se genera desde `local.properties`.
 
 La configuracion de Retrofit no esta en Gradle, sino en `RetrofitProvider.kt`.
 
@@ -682,7 +676,7 @@ Pasos:
 
 1. Abrir el proyecto raiz en Android Studio.
 2. Verificar que el modulo seleccionado sea `:app`.
-3. Configurar `GOOGLE_AI_API_KEY` en `local.properties`.
+3. Configurar `GROQ_API_KEY` en `local.properties`.
 4. Sincronizar Gradle.
 5. Ejecutar en emulador o dispositivo Android.
 6. Probar una consulta textual.
@@ -706,8 +700,8 @@ Guion breve:
 3. La entrega parcial se limita a texto, API, estados, arquitectura y documentacion.
 4. La pantalla principal permite escribir una consulta y ver una respuesta tipo chat.
 5. La arquitectura usa MVVM: UI, ViewModel, Repository y Network.
-6. La consulta fluye desde `ChatScreen` hasta Google IA y vuelve como respuesta textual.
-7. Google IA se usa temporalmente para validar el flujo hasta conectar el motor semantico real.
+6. La consulta fluye desde `ChatScreen` hasta Groq API y vuelve como respuesta textual.
+7. Groq API se usa temporalmente para validar el flujo hasta conectar el motor semantico real.
 8. Si la respuesta es correcta, se agrega al historial y se muestra latencia.
 9. Si ocurre un error, se muestra en pantalla y la app no se cierra.
 10. La latencia es una metrica inicial para documentar el comportamiento del prototipo.
@@ -725,9 +719,9 @@ Respuesta: Un prototipo funcional de cliente movil con chat textual, comunicacio
 
 Pregunta: Por que usaron MVVM?
 
-Respuesta: Porque separa interfaz, logica de estado y acceso a datos. Eso hace el codigo mas mantenible y permite reemplazar Google IA por el backend real sin reescribir la UI.
+Respuesta: Porque separa interfaz, logica de estado y acceso a datos. Eso hace el codigo mas mantenible y permite reemplazar Groq API por el backend real sin reescribir la UI.
 
-Pregunta: Por que usan Google IA?
+Pregunta: Por que usan Groq API?
 
 Respuesta: Como integracion temporal para validar el flujo conversacional textual mientras se prepara la conexion definitiva con el motor semantico PTAH.
 
@@ -743,7 +737,7 @@ Pregunta: Donde esta la API key?
 
 Respuesta: En `local.properties`, que no se sube al repositorio. Gradle la expone mediante `BuildConfig`.
 
-Pregunta: La UI llama directamente a Google IA?
+Pregunta: La UI llama directamente a Groq API?
 
 Respuesta: No. La UI llama al ViewModel, el ViewModel al Repository y el Repository al API Service.
 
@@ -771,7 +765,7 @@ Respuesta: Porque seria inseguro y podria filtrarse en el repositorio. Se config
 
 Pendientes reales:
 
-- Reemplazar Google IA por el backend semantico PTAH real o integrarlo como capa definitiva si corresponde.
+- Reemplazar Groq API por el backend semantico PTAH real o integrarlo como capa definitiva si corresponde.
 - Agregar reconocimiento de voz STT.
 - Agregar sintesis de voz TTS.
 - Mejorar evaluacion de metricas.
@@ -787,7 +781,7 @@ Pendientes reales:
 
 PTAH Android es una app movil en Kotlin y Jetpack Compose que funciona como cliente conversacional textual para consultar reglamentacion institucional. Para la entrega parcial de junio/julio se implementa un prototipo con chat, comunicacion con API, estados de carga/respuesta/error, manejo de errores y latencia basica.
 
-La arquitectura sigue MVVM: `ChatScreen` muestra la interfaz, `ChatViewModel` administra estado e historial, `PtahRepository` arma la consulta con el prompt PTAH y `GoogleAiApiService`/`RetrofitProvider` realizan la llamada HTTP a Google IA. Google IA se usa temporalmente para validar el flujo textual hasta conectar el motor semantico real de PTAH.
+La arquitectura sigue MVVM: `ChatScreen` muestra la interfaz, `ChatViewModel` administra estado e historial, `PtahRepository` arma la consulta y `GroqApiService`/`RetrofitProvider` realizan la llamada HTTP a Groq API. Groq API se usa temporalmente para validar el flujo textual hasta conectar el motor semantico real de PTAH.
 
 Cuando el usuario escribe y envia una consulta, la app agrega el mensaje al historial, muestra carga, mide latencia, llama al Repository, recibe una respuesta textual, la muestra en pantalla y registra el tiempo. Si falla la API o falta la clave, muestra un error visible sin cerrar la app.
 

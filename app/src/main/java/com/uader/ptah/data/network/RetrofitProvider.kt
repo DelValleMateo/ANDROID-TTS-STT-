@@ -2,7 +2,7 @@ package com.uader.ptah.data.network
 
 import android.util.Log
 import com.uader.ptah.BuildConfig
-import com.uader.ptah.data.GoogleAiApiService
+import com.uader.ptah.data.GroqApiService
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Response
@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
 
 object RetrofitProvider {
 
-    private const val BASE_URL = "https://generativelanguage.googleapis.com/"
+    private const val BASE_URL = "https://api.groq.com/"
 
     private val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -27,7 +27,7 @@ object RetrofitProvider {
             if (BuildConfig.DEBUG) {
                 addInterceptor(
                     HttpLoggingInterceptor().apply {
-                        redactHeader("x-goog-api-key")
+                        redactHeader("Authorization")
                         level = HttpLoggingInterceptor.Level.BODY
                     }
                 )
@@ -36,28 +36,28 @@ object RetrofitProvider {
         .addInterceptor(ErrorInterceptor())
         .build()
 
-    val googleAiApiService: GoogleAiApiService by lazy {
+    val groqApiService: GroqApiService by lazy {
         Retrofit.Builder()
             .baseUrl(BASE_URL)
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
-            .create(GoogleAiApiService::class.java)
+            .create(GroqApiService::class.java)
     }
 }
 
 class ApiKeyInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
-        val apiKey = BuildConfig.GOOGLE_AI_API_KEY.trim()
-        Log.d(TAG, "GOOGLE_AI_API_KEY configurada: ${apiKey.isNotBlank()}")
-        Log.d(TAG, "Longitud de GOOGLE_AI_API_KEY: ${apiKey.length} caracteres")
+        val apiKey = BuildConfig.GROQ_API_KEY.trim()
+        Log.d(TAG, "GROQ_API_KEY configurada: ${apiKey.isNotBlank()}")
+        Log.d(TAG, "Longitud de GROQ_API_KEY: ${apiKey.length} caracteres")
 
         if (apiKey.isEmpty()) {
-            throw ApiException("La API key de Google IA no esta configurada.", 0)
+            throw ApiException("La API key de Groq no esta configurada.", 0)
         }
 
         val request = chain.request().newBuilder()
-            .addHeader("x-goog-api-key", apiKey)
+            .addHeader("Authorization", "Bearer $apiKey")
             .addHeader("Content-Type", "application/json")
             .build()
 
@@ -65,7 +65,7 @@ class ApiKeyInterceptor : Interceptor {
     }
 
     private companion object {
-        const val TAG = "GoogleAiApiKey"
+        const val TAG = "GroqApiKey"
     }
 }
 
@@ -98,11 +98,11 @@ class ErrorInterceptor : Interceptor {
 
             val errorMsg = when (response.code) {
                 400 -> "El servicio respondio con una solicitud invalida (400)."
-                401 -> "No autorizado por Google IA. Revisa la API key (401)."
-                403 -> "Acceso prohibido por Google IA. Revisa permisos o restricciones de la API key (403)."
+                401 -> "No autorizado por Groq. Revisa la API key (401)."
+                403 -> "Acceso prohibido por Groq. Revisa permisos o restricciones de la API key (403)."
                 408 -> "La solicitud supero el tiempo de espera (408)."
-                429 -> "Se alcanzo el limite de uso de Google IA. Intenta nuevamente mas tarde (429)."
-                in 500..599 -> "Google IA respondio con un error del servidor (${response.code}). Intenta nuevamente."
+                429 -> "Se alcanzo el limite de uso de Groq. Intenta nuevamente mas tarde (429)."
+                in 500..599 -> "Groq respondio con un error del servidor (${response.code}). Intenta nuevamente."
                 else -> "El servicio respondio con un error (${response.code}). Intenta nuevamente."
             }
             throw ApiException(errorMsg, response.code)

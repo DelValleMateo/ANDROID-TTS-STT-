@@ -62,12 +62,12 @@ class ChatViewModel(
 
         viewModelScope.launch {
             val startedAt = SystemClock.elapsedRealtime()
-            Log.d(TAG, "Inicio de consulta a Google IA: $query")
+            Log.d(TAG, "Inicio de consulta a Groq: $query")
 
             repository.ask(query)
                 .onSuccess { response ->
                     val latencyMs = SystemClock.elapsedRealtime() - startedAt
-                    Log.d(TAG, "Fin de consulta a Google IA. Latencia: ${latencyMs}ms")
+                    Log.d(TAG, "Fin de consulta a Groq. Latencia: ${latencyMs}ms")
 
                     _messages.add(ChatMessage(ChatMessage.Author.SYSTEM, response.answer))
                     uiState = ChatUiState.Success(latencyMs)
@@ -86,7 +86,7 @@ class ChatViewModel(
             else -> throwable.message ?: "Fallo inesperado. Intenta nuevamente."
         }
 
-        Log.e(TAG, "Error en consulta a Google IA tras ${latencyMs}ms: $message", throwable)
+        Log.e(TAG, "Error en consulta a Groq tras ${latencyMs}ms: $message", throwable)
         uiState = ChatUiState.Error(message, latencyMs)
 
         viewModelScope.launch {
