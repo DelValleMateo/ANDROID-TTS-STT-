@@ -28,70 +28,99 @@ import kotlinx.coroutines.flow.asStateFlow
  *  - Solo procesa un idioma a la vez (configurado como es-AR).
  *  - El motor no siempre detecta fin de habla correctamente en ambientes ruidosos.
  */
+import android.os.Handler
+import android.os.Looper
+import java.util.Locale
+
 class SpeechRecognizerManager(private val context: Context) {
 
     private val _sttState = MutableStateFlow<SttState>(SttState.Idle)
     val sttState: StateFlow<SttState> = _sttState.asStateFlow()
 
     private var speechRecognizer: SpeechRecognizer? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
 
-    /** Inicia el ciclo de escucha. El estado pasa a [SttState.Listening] cuando el motor está listo. */
+    /** Inicia el ciclo de escucha en el hilo principal. */
     fun startListening() {
-        if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-            Log.w(TAG, "SpeechRecognizer no disponible en este dispositivo.")
-            _sttState.value = SttState.Error(
-                "El reconocimiento de voz no está disponible en este dispositivo."
-            )
-            return
-        }
+        mainHandler.post {
+            if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+                Log.w(TAG, "SpeechRecognizer no disponible en este dispositivo.")
+                _sttState.value = SttState.Error(
+                    "El reconocimiento de voz no está disponible en este dispositivo."
+                )
+                return@post
+            }
 
-        // Destruir instancia anterior antes de crear una nueva.
-        speechRecognizer?.destroy()
-        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
-            setRecognitionListener(PtahRecognitionListener())
-        }
+            try {
+                // Destruir instancia previa de forma segura
+                speechRecognizer?.destroy()
+                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
+                    setRecognitionListener(PtahRecognitionListener())
+                }
 
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(
-                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
-            )
-            // Español argentino como idioma principal.
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "es-AR")
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "es-AR")
-            putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, true)
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-        }
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(
+                        RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                        RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                    )
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "es-AR")
+                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                    putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
+                }
 
-        Log.d(TAG, "Iniciando escucha STT.")
-        speechRecognizer?.startListening(intent)
+                Log.d(TAG, "Iniciando escucha STT en MainLooper.")
+                speechRecognizer?.startListening(intent)
+            } catch (e: Exception) {
+                Log.e(TAG, "Excepción al iniciar SpeechRecognizer: ${e.message}", e)
+                _sttState.value = SttState.Error("Error al iniciar el micrófono: ${e.localizedMessage}")
+            }
+        }
     }
 
-    /** Detiene la escucha y pasa el estado a [SttState.Processing] mientras se procesa el audio. */
+    /** Detiene la escucha en el hilo principal. */
     fun stopListening() {
-        Log.d(TAG, "Deteniendo escucha STT.")
-        speechRecognizer?.stopListening()
-        _sttState.value = SttState.Processing
+        mainHandler.post {
+            Log.d(TAG, "Deteniendo escucha STT.")
+            try {
+                speechRecognizer?.stopListening()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error en stopListening", e)
+            }
+            _sttState.value = SttState.Processing
+        }
     }
 
     /** Cancela el reconocimiento en curso y vuelve a [SttState.Idle]. */
     fun cancel() {
-        Log.d(TAG, "Cancelando reconocimiento STT.")
-        speechRecognizer?.cancel()
-        _sttState.value = SttState.Idle
+        mainHandler.post {
+            Log.d(TAG, "Cancelando reconocimiento STT.")
+            try {
+                speechRecognizer?.cancel()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error en cancel", e)
+            }
+            _sttState.value = SttState.Idle
+        }
     }
 
-    /** Resetea el estado a [SttState.Idle] sin cancelar el reconocedor. */
+    /** Resetea el estado a [SttState.Idle]. */
     fun resetToIdle() {
         _sttState.value = SttState.Idle
     }
 
-    /** Libera los recursos del [SpeechRecognizer]. Llamar desde [ViewModel.onCleared]. */
+    /** Libera los recursos del [SpeechRecognizer]. */
     fun destroy() {
-        Log.d(TAG, "Destruyendo SpeechRecognizer.")
-        speechRecognizer?.destroy()
-        speechRecognizer = null
+        mainHandler.post {
+            Log.d(TAG, "Destruyendo SpeechRecognizer.")
+            try {
+                speechRecognizer?.destroy()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error al destruir recognizer", e)
+            }
+            speechRecognizer = null
+        }
     }
 
     // ─── RecognitionListener ────────────────────────────────────────────────
