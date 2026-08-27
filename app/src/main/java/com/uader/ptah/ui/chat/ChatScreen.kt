@@ -1,5 +1,17 @@
 package com.uader.ptah.ui.chat
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,18 +24,26 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -33,17 +53,23 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.uader.ptah.ui.theme.PtahSpacing
 import com.uader.ptah.ui.theme.screenHorizontalPadding
@@ -53,14 +79,29 @@ import kotlinx.coroutines.flow.collectLatest
 @Composable
 fun ChatScreen(
     modifier: Modifier = Modifier,
-    viewModel: ChatViewModel = viewModel(factory = ChatViewModel.Factory())
 ) {
+    val context = LocalContext.current
+    val viewModel: ChatViewModel = viewModel(factory = ChatViewModel.Factory(context))
+
     val messages = viewModel.messages
     val uiState = viewModel.uiState
     val inputText = viewModel.inputText
+    val sttState by viewModel.sttState.collectAsState()
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // Launcher para solicitar permiso de micrófono en tiempo de ejecución.
+    val micPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            viewModel.onMicClicked(permissionGranted = true)
+        } else {
+            // El usuario denegó el permiso: el ViewModel emitirá ShowSttError.
+        }
+    }
+
+    // Manejo de eventos de un solo disparo desde el ViewModel.
     LaunchedEffect(Unit) {
         viewModel.userEvents.collectLatest { event ->
             when (event) {
@@ -74,10 +115,22 @@ fun ChatScreen(
                         viewModel.retryLastQuery()
                     }
                 }
+
+                is UserEvent.ShowSttError -> {
+                    snackbarHostState.showSnackbar(
+                        message = event.message,
+                        duration = SnackbarDuration.Short
+                    )
+                }
+
+                is UserEvent.RequestMicPermission -> {
+                    micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                }
             }
         }
     }
 
+    // Auto-scroll al último mensaje.
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.lastIndex)
@@ -107,9 +160,22 @@ fun ChatScreen(
             paddingValues = innerPadding,
             messages = messages,
             uiState = uiState,
+            sttState = sttState,
             input = inputText,
             onInputChange = viewModel::onTextChanged,
             onSend = viewModel::onSendClicked,
+            onMicClicked = {
+                val permissionGranted = ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.RECORD_AUDIO
+                ) == PackageManager.PERMISSION_GRANTED
+
+                viewModel.onMicClicked(permissionGranted)
+
+                if (!permissionGranted) {
+                    micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                }
+            },
+            onCancelStt = { viewModel.onMicClicked(permissionGranted = true) },
             listState = listState
         )
     }
@@ -120,9 +186,12 @@ private fun ChatContent(
     paddingValues: PaddingValues,
     messages: List<ChatMessage>,
     uiState: ChatUiState,
+    sttState: SttState,
     input: String,
     onInputChange: (String) -> Unit,
     onSend: () -> Unit,
+    onMicClicked: () -> Unit,
+    onCancelStt: () -> Unit,
     listState: LazyListState
 ) {
     val isLoading = uiState is ChatUiState.Loading
@@ -134,6 +203,7 @@ private fun ChatContent(
             .screenHorizontalPadding()
             .padding(vertical = PtahSpacing.screenVertical)
     ) {
+        // Lista de mensajes.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -154,18 +224,127 @@ private fun ChatContent(
             }
         }
 
+        // Estado del chat (latencia, carga, error).
         StatusRow(uiState)
+
+        // Banner "Escuchando..." — aparece solo cuando el mic está activo.
+        SttStatusBanner(
+            sttState = sttState,
+            onCancel = onCancelStt
+        )
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
+        // Fila de entrada: campo de texto + botón mic + botón enviar.
         InputRow(
             value = input,
             onValueChange = onInputChange,
             onSend = onSend,
-            sendEnabled = input.isNotBlank() && !isLoading
+            onMicClicked = onMicClicked,
+            sendEnabled = input.isNotBlank() && !isLoading,
+            sttState = sttState
         )
     }
 }
+
+// ─── Banner de estado STT ─────────────────────────────────────────────────────
+
+@Composable
+private fun SttStatusBanner(
+    sttState: SttState,
+    onCancel: () -> Unit
+) {
+    val isVisible = sttState is SttState.Listening || sttState is SttState.Processing
+
+    AnimatedVisibility(
+        visible = isVisible,
+        enter = fadeIn(tween(200)),
+        exit = fadeOut(tween(200))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = RoundedCornerShape(8.dp)
+                )
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Indicador pulsante cuando está escuchando.
+                if (sttState is SttState.Listening) {
+                    PulsingDot()
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "Escuchando...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        fontWeight = FontWeight.Medium
+                    )
+                } else {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "Procesando voz...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
+            }
+
+            // Botón cancelar — solo disponible mientras escucha, no mientras procesa.
+            if (sttState is SttState.Listening) {
+                TextButton(onClick = onCancel) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Cancelar reconocimiento de voz",
+                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = "Cancelar",
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Punto rojo que pulsa para indicar que el micrófono está capturando audio. */
+@Composable
+private fun PulsingDot() {
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 0.8f,
+        targetValue = 1.3f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(600),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseScale"
+    )
+
+    Box(
+        modifier = Modifier
+            .size(12.dp)
+            .scale(scale)
+            .background(
+                color = MaterialTheme.colorScheme.error,
+                shape = CircleShape
+            )
+    )
+}
+
+// ─── Composables existentes ───────────────────────────────────────────────────
 
 @Composable
 private fun EmptyHistoryPlaceholder() {
@@ -181,7 +360,7 @@ private fun EmptyHistoryPlaceholder() {
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "Escribi una consulta y toca Enviar.",
+                text = "Escribí una consulta o usá el micrófono 🎙️",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -269,14 +448,20 @@ private fun InputRow(
     value: String,
     onValueChange: (String) -> Unit,
     onSend: () -> Unit,
-    sendEnabled: Boolean
+    onMicClicked: () -> Unit,
+    sendEnabled: Boolean,
+    sttState: SttState
 ) {
+    val isListening = sttState is SttState.Listening
+    val isProcessing = sttState is SttState.Processing
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // Campo de texto.
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
@@ -285,11 +470,48 @@ private fun InputRow(
                 .semantics {
                     contentDescription = "Campo de texto. Escribi tu consulta normativa aqui."
                 },
-            placeholder = { Text("Escribi tu consulta...") },
+            placeholder = { Text("Escribí tu consulta...") },
             label = { Text("Consulta") },
             singleLine = true
         )
-        Spacer(Modifier.width(PtahSpacing.itemGap))
+
+        Spacer(Modifier.width(8.dp))
+
+        // Botón de micrófono.
+        IconButton(
+            onClick = onMicClicked,
+            enabled = !isProcessing,
+            modifier = Modifier
+                .size(48.dp)
+                .semantics {
+                    contentDescription = when {
+                        isListening -> "Micrófono activo. Tocá para cancelar."
+                        isProcessing -> "Procesando voz. Espera un momento."
+                        else -> "Activar reconocimiento de voz."
+                    }
+                }
+        ) {
+            when {
+                isProcessing -> CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    strokeWidth = 2.dp
+                )
+                isListening -> Icon(
+                    imageVector = Icons.Default.MicOff,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
+                )
+                else -> Icon(
+                    imageVector = Icons.Default.Mic,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+
+        Spacer(Modifier.width(8.dp))
+
+        // Botón enviar.
         Button(
             onClick = onSend,
             enabled = sendEnabled,

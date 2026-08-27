@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
 
 object RetrofitProvider {
 
-    private const val BASE_URL = "https://api.groq.com/"
+    private const val BASE_URL = "https://api.groq.com/openai/v1/"
 
     private val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -50,10 +50,9 @@ class ApiKeyInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val apiKey = BuildConfig.GROQ_API_KEY.trim()
         Log.d(TAG, "GROQ_API_KEY configurada: ${apiKey.isNotBlank()}")
-        Log.d(TAG, "Longitud de GROQ_API_KEY: ${apiKey.length} caracteres")
 
-        if (apiKey.isEmpty()) {
-            throw ApiException("La API key de Groq no esta configurada.", 0)
+        if (apiKey.isEmpty() || apiKey == "TU_API_KEY_ACA") {
+            throw ApiException("La API key de Groq no está configurada. Agrégala en local.properties como GROQ_API_KEY=gsk_...", 401)
         }
 
         val request = chain.request().newBuilder()
@@ -88,22 +87,28 @@ class ErrorInterceptor : Interceptor {
         val response = try {
             chain.proceed(chain.request())
         } catch (e: SocketTimeoutException) {
-            throw IOException("No se pudo conectar con el servidor. La solicitud supero el tiempo de espera.", e)
+            throw IOException("No se pudo conectar con el servidor. La solicitud superó el tiempo de espera.", e)
         } catch (e: IOException) {
-            throw IOException("No se pudo conectar con el servidor. Verifica tu conexion.", e)
+            throw IOException("No se pudo conectar con el servidor. Verifica tu conexión a internet.", e)
         }
 
         if (!response.isSuccessful) {
-            response.body?.close()
+            val errorBody = try {
+                response.body?.string().orEmpty()
+            } catch (e: Exception) {
+                ""
+            }
+            Log.e("ErrorInterceptor", "Error HTTP ${response.code}: $errorBody")
 
             val errorMsg = when (response.code) {
-                400 -> "El servicio respondio con una solicitud invalida (400)."
-                401 -> "No autorizado por Groq. Revisa la API key (401)."
-                403 -> "Acceso prohibido por Groq. Revisa permisos o restricciones de la API key (403)."
-                408 -> "La solicitud supero el tiempo de espera (408)."
-                429 -> "Se alcanzo el limite de uso de Groq. Intenta nuevamente mas tarde (429)."
-                in 500..599 -> "Groq respondio con un error del servidor (${response.code}). Intenta nuevamente."
-                else -> "El servicio respondio con un error (${response.code}). Intenta nuevamente."
+                400 -> "Solicitud inválida (400). Revisa los parámetros enviados a Groq."
+                401 -> "No autorizado (401). Verifica tu GROQ_API_KEY en local.properties."
+                403 -> "Acceso prohibido (403). Revisa los permisos de tu API key de Groq."
+                404 -> "Recurso o modelo no encontrado (404). Verifica el modelo configurado en Groq."
+                408 -> "La solicitud superó el tiempo de espera (408)."
+                429 -> "Límite de cuota alcanzado en Groq (429). Intenta nuevamente en unos segundos."
+                in 500..599 -> "Error interno del servidor Groq (${response.code}). Intenta nuevamente."
+                else -> "El servicio respondió con error (${response.code}): $errorBody"
             }
             throw ApiException(errorMsg, response.code)
         }
