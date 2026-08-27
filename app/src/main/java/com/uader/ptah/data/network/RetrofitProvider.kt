@@ -58,6 +58,7 @@ class ApiKeyInterceptor : Interceptor {
         val request = chain.request().newBuilder()
             .addHeader("Authorization", "Bearer $apiKey")
             .addHeader("Content-Type", "application/json")
+            .addHeader("User-Agent", "PTAH-Android/1.0")
             .build()
 
         return chain.proceed(request)

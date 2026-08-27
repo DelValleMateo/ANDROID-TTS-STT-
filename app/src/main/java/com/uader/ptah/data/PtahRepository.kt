@@ -51,6 +51,6 @@ class PtahRepositoryImpl(
 
     private companion object {
         const val TAG = "PtahRepository"
-        const val GROQ_MODEL = "llama-3.1-8b-instant"
+        const val GROQ_MODEL = "openai/gpt-oss-120b"
     }
 }
