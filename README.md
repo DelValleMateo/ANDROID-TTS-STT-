@@ -69,10 +69,10 @@ Si se compila desde terminal, verificar que `JAVA_HOME` apunte a una instalacion
 - Estado de carga durante la consulta.
 - Manejo de errores visible en pantalla.
 - Latencia basica registrada en Logcat y mostrada en la UI.
+- Lectura en voz alta de respuestas con controles de reproducción y parada.
 
 ## Pendiente para etapas posteriores
 
 - Conexion definitiva con el motor semantico PTAH real.
 - Reconocimiento de voz.
-- Sintesis de voz.
 - Evaluacion completa de usabilidad, eficacia y eficiencia.

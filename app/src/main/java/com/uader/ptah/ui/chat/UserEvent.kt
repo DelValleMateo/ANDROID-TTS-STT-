@@ -9,4 +9,7 @@ sealed interface UserEvent {
 
     /** La UI debe lanzar el diálogo de solicitud de permiso de micrófono. */
     data object RequestMicPermission : UserEvent
+
+    /** Error de inicialización o reproducción TTS. */
+    data class ShowTtsError(val message: String) : UserEvent
 }

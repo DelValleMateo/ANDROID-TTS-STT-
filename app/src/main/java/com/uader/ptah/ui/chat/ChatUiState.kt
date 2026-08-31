@@ -43,6 +43,7 @@ enum class InputOrigin {
  *                  como valor neutral por defecto.
  */
 data class ChatMessage(
+    val id: Long,
     val author: Author,
     val text: String,
     val origin: InputOrigin = InputOrigin.KEYBOARD

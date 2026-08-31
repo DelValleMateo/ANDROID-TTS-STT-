@@ -5,6 +5,8 @@ import com.uader.ptah.data.PtahRepository
 import com.uader.ptah.data.PtahRepositoryImpl
 import com.uader.ptah.data.network.RetrofitProvider
 import com.uader.ptah.data.stt.SpeechRecognizerManager
+import com.uader.ptah.data.tts.AndroidTextToSpeechManager
+import com.uader.ptah.data.tts.SpeechOutput
 
 /**
  * DI manual mínima.
@@ -31,5 +33,9 @@ object ServiceLocator {
      */
     fun createSpeechManager(context: Context): SpeechRecognizerManager {
         return SpeechRecognizerManager(context.applicationContext)
+    }
+
+    fun createSpeechOutput(context: Context): SpeechOutput {
+        return AndroidTextToSpeechManager(context.applicationContext)
     }
 }

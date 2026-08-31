@@ -36,9 +36,11 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -77,6 +79,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.uader.ptah.ui.theme.PtahSpacing
+import com.uader.ptah.data.tts.TtsState
 import com.uader.ptah.ui.theme.screenHorizontalPadding
 import kotlinx.coroutines.flow.collectLatest
 
@@ -93,6 +96,7 @@ fun ChatScreen(
     val inputText = viewModel.inputText
     val inputOrigin = viewModel.inputOrigin
     val sttState by viewModel.sttState.collectAsState()
+    val ttsState by viewModel.ttsState.collectAsState()
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -131,6 +135,13 @@ fun ChatScreen(
                 is UserEvent.RequestMicPermission -> {
                     micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                 }
+
+                is UserEvent.ShowTtsError -> {
+                    snackbarHostState.showSnackbar(
+                        message = event.message,
+                        duration = SnackbarDuration.Long
+                    )
+                }
             }
         }
     }
@@ -166,6 +177,7 @@ fun ChatScreen(
             messages = messages,
             uiState = uiState,
             sttState = sttState,
+            ttsState = ttsState,
             input = inputText,
             inputOrigin = inputOrigin,
             onInputChange = viewModel::onTextChanged,
@@ -182,6 +194,8 @@ fun ChatScreen(
                 }
             },
             onCancelStt = { viewModel.onMicClicked(permissionGranted = true) },
+            onSpeak = viewModel::onSpeakClicked,
+            onStopSpeaking = viewModel::onStopSpeakingClicked,
             listState = listState
         )
     }
@@ -193,12 +207,15 @@ private fun ChatContent(
     messages: List<ChatMessage>,
     uiState: ChatUiState,
     sttState: SttState,
+    ttsState: TtsState,
     input: String,
     inputOrigin: InputOrigin,
     onInputChange: (String) -> Unit,
     onSend: () -> Unit,
     onMicClicked: () -> Unit,
     onCancelStt: () -> Unit,
+    onSpeak: (ChatMessage) -> Unit,
+    onStopSpeaking: () -> Unit,
     listState: LazyListState
 ) {
     val isLoading = uiState is ChatUiState.Loading
@@ -225,7 +242,12 @@ private fun ChatContent(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(messages) { msg ->
-                        MessageBubble(msg)
+                        MessageBubble(
+                            message = msg,
+                            ttsState = ttsState,
+                            onSpeak = { onSpeak(msg) },
+                            onStop = onStopSpeaking
+                        )
                     }
                 }
             }
@@ -396,7 +418,12 @@ private fun EmptyHistoryPlaceholder() {
  * Los mensajes del sistema nunca muestran badge de origen.
  */
 @Composable
-private fun MessageBubble(message: ChatMessage) {
+private fun MessageBubble(
+    message: ChatMessage,
+    ttsState: TtsState,
+    onSpeak: () -> Unit,
+    onStop: () -> Unit
+) {
     val isUser = message.author == ChatMessage.Author.USER
     val bg = if (isUser) {
         MaterialTheme.colorScheme.primaryContainer
@@ -425,6 +452,48 @@ private fun MessageBubble(message: ChatMessage) {
                     .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
                 Text(text = message.text)
+
+                if (!isUser) {
+                    val isSpeaking = ttsState is TtsState.Speaking &&
+                        ttsState.messageId == message.id
+                    Spacer(Modifier.height(4.dp))
+                    TextButton(
+                        onClick = if (isSpeaking) onStop else onSpeak,
+                        enabled = ttsState !is TtsState.Initializing,
+                        modifier = Modifier.semantics {
+                            contentDescription = if (isSpeaking) {
+                                "Detener audio de esta respuesta"
+                            } else {
+                                "Escuchar esta respuesta"
+                            }
+                        }
+                    ) {
+                        Icon(
+                            imageVector = if (isSpeaking) Icons.Default.Stop else Icons.AutoMirrored.Filled.VolumeUp,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(if (isSpeaking) "Detener" else "Escuchar")
+                    }
+                    AnimatedVisibility(visible = isSpeaking) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.semantics {
+                                liveRegion = LiveRegionMode.Polite
+                                contentDescription = "Reproduciendo respuesta"
+                            }
+                        ) {
+                            PulsingDot()
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = "Reproduciendo...",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
 
                 // Badge de origen: solo en mensajes del usuario enviados por voz.
                 if (isUser && message.origin == InputOrigin.VOICE) {

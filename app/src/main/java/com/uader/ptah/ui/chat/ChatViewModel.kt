@@ -13,6 +13,8 @@ import androidx.lifecycle.viewModelScope
 import com.uader.ptah.data.PtahRepository
 import com.uader.ptah.data.network.ApiException
 import com.uader.ptah.data.stt.SpeechRecognizerManager
+import com.uader.ptah.data.tts.SpeechOutput
+import com.uader.ptah.data.tts.TtsState
 import com.uader.ptah.di.ServiceLocator
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.StateFlow
@@ -22,7 +24,8 @@ import java.io.IOException
 
 class ChatViewModel(
     private val repository: PtahRepository,
-    private val speechManager: SpeechRecognizerManager
+    private val speechManager: SpeechRecognizerManager,
+    private val speechOutput: SpeechOutput
 ) : ViewModel() {
 
     // ─── Estado del chat ────────────────────────────────────────────────────
@@ -47,6 +50,9 @@ class ChatViewModel(
         private set
 
     private var lastQuery: String? = null
+    private var nextMessageId = 0L
+
+    val ttsState: StateFlow<TtsState> = speechOutput.state
 
     // ─── Estado de STT ──────────────────────────────────────────────────────
 
@@ -85,6 +91,11 @@ class ChatViewModel(
                 }
             }
         }
+        viewModelScope.launch {
+            speechOutput.state.collect { state ->
+                if (state is TtsState.Error) _userEvents.send(UserEvent.ShowTtsError(state.message))
+            }
+        }
     }
 
     // ─── Punto de entrada unificado para resultado STT ───────────────────────
@@ -114,10 +125,11 @@ class ChatViewModel(
      * Resetea el origen a [InputOrigin.KEYBOARD] para no etiquetar como voz un texto editado.
      */
     fun onTextChanged(text: String) {
+        val wasVoiceInput = inputOrigin == InputOrigin.VOICE
         inputText = text
         // Si el usuario edita el campo después de un dictado, el origen pasa a KEYBOARD.
         // Así la burbuja no mostrará el badge de voz para texto modificado por el usuario.
-        if (inputOrigin == InputOrigin.VOICE && text != inputText) {
+        if (wasVoiceInput) {
             inputOrigin = InputOrigin.KEYBOARD
         }
     }
@@ -128,7 +140,7 @@ class ChatViewModel(
         if (uiState is ChatUiState.Loading) return
 
         val origin = inputOrigin          // capturar antes de limpiar
-        _messages.add(ChatMessage(ChatMessage.Author.USER, clean, origin))
+        _messages.add(ChatMessage(nextMessageId++, ChatMessage.Author.USER, clean, origin))
         inputText = ""
         inputOrigin = InputOrigin.KEYBOARD   // resetear para la próxima consulta
         executeQuery(clean)
@@ -153,7 +165,8 @@ class ChatViewModel(
                 .onSuccess { response ->
                     val latencyMs = SystemClock.elapsedRealtime() - startedAt
                     Log.d(TAG, "Fin de consulta a Groq. Latencia: ${latencyMs}ms")
-                    _messages.add(ChatMessage(ChatMessage.Author.SYSTEM, response.answer))
+                    speechOutput.stop()
+                    _messages.add(ChatMessage(nextMessageId++, ChatMessage.Author.SYSTEM, response.answer))
                     uiState = ChatUiState.Success(latencyMs)
                 }
                 .onFailure { throwable ->
@@ -206,11 +219,18 @@ class ChatViewModel(
         }
     }
 
+    fun onSpeakClicked(message: ChatMessage) {
+        if (message.author == ChatMessage.Author.SYSTEM) speechOutput.speak(message.id, message.text)
+    }
+
+    fun onStopSpeakingClicked() = speechOutput.stop()
+
     // ─── Ciclo de vida ───────────────────────────────────────────────────────
 
     override fun onCleared() {
         super.onCleared()
         speechManager.destroy()
+        speechOutput.shutdown()
     }
 
     // ─── Factory ─────────────────────────────────────────────────────────────
@@ -226,7 +246,8 @@ class ChatViewModel(
             }
             return ChatViewModel(
                 repository = repository,
-                speechManager = ServiceLocator.createSpeechManager(context)
+                speechManager = ServiceLocator.createSpeechManager(context),
+                speechOutput = ServiceLocator.createSpeechOutput(context)
             ) as T
         }
     }
