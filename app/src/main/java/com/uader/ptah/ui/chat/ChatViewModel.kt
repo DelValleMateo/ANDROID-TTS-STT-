@@ -36,6 +36,16 @@ class ChatViewModel(
     var inputText by mutableStateOf("")
         private set
 
+    /**
+     * Indica el origen del texto actualmente en [inputText].
+     *
+     * Se actualiza cada vez que el texto cambia por teclado ([KEYBOARD]) o
+     * llega un resultado STT ([VOICE]). Se incluye en [ChatMessage] al enviar,
+     * para que la UI dibuje el badge correcto en la burbuja del usuario.
+     */
+    var inputOrigin by mutableStateOf(InputOrigin.KEYBOARD)
+        private set
+
     private var lastQuery: String? = null
 
     // ─── Estado de STT ──────────────────────────────────────────────────────
@@ -55,10 +65,9 @@ class ChatViewModel(
             speechManager.sttState.collect { state ->
                 when (state) {
                     is SttState.Result -> {
-                        // El texto reconocido se carga en el campo de entrada para que el
-                        // usuario lo revise antes de enviarlo.
-                        inputText = state.text
-                        Log.d(TAG, "STT Result → inputText: \"${state.text}\"")
+                        // Delegar en la función pública para que sea testeable
+                        // y para documentar claramente el punto de unificación.
+                        onSttResultReceived(state.text)
                         speechManager.resetToIdle()
                     }
                     is SttState.Error -> {
@@ -78,10 +87,39 @@ class ChatViewModel(
         }
     }
 
+    // ─── Punto de entrada unificado para resultado STT ───────────────────────
+
+    /**
+     * Recibe el texto reconocido por el motor STT y lo carga en el campo de entrada.
+     *
+     * Este es el **único punto de unión** entre la tubería de voz y la tubería de texto:
+     * después de esta función, el texto dictado sigue exactamente el mismo camino que el
+     * texto escrito a mano → [inputText] → [onSendClicked] → [executeQuery].
+     *
+     * La UI mantiene el campo editable para que el usuario pueda corregir antes de enviar.
+     *
+     * @param text Texto reconocido por [SpeechRecognizerManager]. Nunca vacío (el manager
+     *             emite [SttState.Error] si el resultado es blank).
+     */
+    fun onSttResultReceived(text: String) {
+        inputText = text
+        inputOrigin = InputOrigin.VOICE
+        Log.d(TAG, "STT Result → inputText: \"$text\" | origin: VOICE")
+    }
+
     // ─── Acciones del chat ──────────────────────────────────────────────────
 
+    /**
+     * Llamado por la UI cada vez que el usuario modifica el campo de texto manualmente.
+     * Resetea el origen a [InputOrigin.KEYBOARD] para no etiquetar como voz un texto editado.
+     */
     fun onTextChanged(text: String) {
         inputText = text
+        // Si el usuario edita el campo después de un dictado, el origen pasa a KEYBOARD.
+        // Así la burbuja no mostrará el badge de voz para texto modificado por el usuario.
+        if (inputOrigin == InputOrigin.VOICE && text != inputText) {
+            inputOrigin = InputOrigin.KEYBOARD
+        }
     }
 
     fun onSendClicked() {
@@ -89,8 +127,10 @@ class ChatViewModel(
         if (clean.isEmpty()) return
         if (uiState is ChatUiState.Loading) return
 
-        _messages.add(ChatMessage(ChatMessage.Author.USER, clean))
+        val origin = inputOrigin          // capturar antes de limpiar
+        _messages.add(ChatMessage(ChatMessage.Author.USER, clean, origin))
         inputText = ""
+        inputOrigin = InputOrigin.KEYBOARD   // resetear para la próxima consulta
         executeQuery(clean)
     }
 

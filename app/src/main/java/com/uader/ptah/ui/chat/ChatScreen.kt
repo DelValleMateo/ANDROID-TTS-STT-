@@ -12,6 +12,8 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,6 +48,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -65,7 +68,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -86,6 +91,7 @@ fun ChatScreen(
     val messages = viewModel.messages
     val uiState = viewModel.uiState
     val inputText = viewModel.inputText
+    val inputOrigin = viewModel.inputOrigin
     val sttState by viewModel.sttState.collectAsState()
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -96,9 +102,8 @@ fun ChatScreen(
     ) { granted ->
         if (granted) {
             viewModel.onMicClicked(permissionGranted = true)
-        } else {
-            // El usuario denegó el permiso: el ViewModel emitirá ShowSttError.
         }
+        // Si denegado: el ViewModel emitirá ShowSttError via el observer de SttState.PermissionDenied.
     }
 
     // Manejo de eventos de un solo disparo desde el ViewModel.
@@ -162,6 +167,7 @@ fun ChatScreen(
             uiState = uiState,
             sttState = sttState,
             input = inputText,
+            inputOrigin = inputOrigin,
             onInputChange = viewModel::onTextChanged,
             onSend = viewModel::onSendClicked,
             onMicClicked = {
@@ -188,6 +194,7 @@ private fun ChatContent(
     uiState: ChatUiState,
     sttState: SttState,
     input: String,
+    inputOrigin: InputOrigin,
     onInputChange: (String) -> Unit,
     onSend: () -> Unit,
     onMicClicked: () -> Unit,
@@ -228,6 +235,7 @@ private fun ChatContent(
         StatusRow(uiState)
 
         // Banner "Escuchando..." — aparece solo cuando el mic está activo.
+        // Usa slideInVertically + fade para una transición más fluida.
         SttStatusBanner(
             sttState = sttState,
             onCancel = onCancelStt
@@ -238,6 +246,7 @@ private fun ChatContent(
         // Fila de entrada: campo de texto + botón mic + botón enviar.
         InputRow(
             value = input,
+            inputOrigin = inputOrigin,
             onValueChange = onInputChange,
             onSend = onSend,
             onMicClicked = onMicClicked,
@@ -258,8 +267,10 @@ private fun SttStatusBanner(
 
     AnimatedVisibility(
         visible = isVisible,
-        enter = fadeIn(tween(200)),
-        exit = fadeOut(tween(200))
+        // Desliza desde abajo + fade al aparecer.
+        enter = slideInVertically(tween(220)) { it } + fadeIn(tween(220)),
+        // Desliza hacia abajo + fade al desaparecer.
+        exit = slideOutVertically(tween(180)) { it } + fadeOut(tween(180))
     ) {
         Row(
             modifier = Modifier
@@ -268,7 +279,16 @@ private fun SttStatusBanner(
                     color = MaterialTheme.colorScheme.errorContainer,
                     shape = RoundedCornerShape(8.dp)
                 )
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                // TalkBack anuncia cambios en este banner automáticamente.
+                .semantics {
+                    liveRegion = LiveRegionMode.Polite
+                    contentDescription = if (sttState is SttState.Listening) {
+                        "Escuchando. Hablá ahora."
+                    } else {
+                        "Procesando voz. Esperá un momento."
+                    }
+                },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -344,7 +364,7 @@ private fun PulsingDot() {
     )
 }
 
-// ─── Composables existentes ───────────────────────────────────────────────────
+// ─── Composables de historial ─────────────────────────────────────────────────
 
 @Composable
 private fun EmptyHistoryPlaceholder() {
@@ -368,6 +388,13 @@ private fun EmptyHistoryPlaceholder() {
     }
 }
 
+/**
+ * Burbuja de mensaje del historial.
+ *
+ * Para mensajes del **usuario** enviados por voz ([InputOrigin.VOICE]) se muestra
+ * un badge 🎙️ debajo del texto, con `contentDescription` para TalkBack.
+ * Los mensajes del sistema nunca muestran badge de origen.
+ */
 @Composable
 private fun MessageBubble(message: ChatMessage) {
     val isUser = message.author == ChatMessage.Author.USER
@@ -392,15 +419,42 @@ private fun MessageBubble(message: ChatMessage) {
             contentColor = fg,
             shape = RoundedCornerShape(12.dp)
         ) {
-            Text(
-                text = message.text,
+            Column(
                 modifier = Modifier
                     .widthIn(max = 300.dp)
                     .padding(horizontal = 12.dp, vertical = 8.dp)
-            )
+            ) {
+                Text(text = message.text)
+
+                // Badge de origen: solo en mensajes del usuario enviados por voz.
+                if (isUser && message.origin == InputOrigin.VOICE) {
+                    Spacer(Modifier.height(4.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.semantics {
+                            contentDescription = "Enviado por voz"
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Mic,
+                            contentDescription = null, // descrito por el Row padre
+                            tint = fg.copy(alpha = 0.6f),
+                            modifier = Modifier.size(11.dp)
+                        )
+                        Spacer(Modifier.width(3.dp))
+                        Text(
+                            text = "por voz",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = fg.copy(alpha = 0.6f)
+                        )
+                    }
+                }
+            }
         }
     }
 }
+
+// ─── Status y campo de entrada ────────────────────────────────────────────────
 
 @Composable
 private fun StatusRow(state: ChatUiState) {
@@ -446,6 +500,7 @@ private fun StatusRow(state: ChatUiState) {
 @Composable
 private fun InputRow(
     value: String,
+    inputOrigin: InputOrigin,
     onValueChange: (String) -> Unit,
     onSend: () -> Unit,
     onMicClicked: () -> Unit,
@@ -454,6 +509,25 @@ private fun InputRow(
 ) {
     val isListening = sttState is SttState.Listening
     val isProcessing = sttState is SttState.Processing
+    val isVoiceInput = inputOrigin == InputOrigin.VOICE
+
+    // Placeholder dinámico según el origen del texto actual.
+    val placeholder = if (isVoiceInput && value.isNotBlank()) {
+        "Texto reconocido por voz — podés editarlo"
+    } else {
+        "Escribí tu consulta..."
+    }
+
+    // El borde del campo usa secondaryContainer cuando el texto vino de voz,
+    // para dar un sutil feedback visual de origen.
+    val fieldColors = if (isVoiceInput && value.isNotBlank()) {
+        OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = MaterialTheme.colorScheme.secondary,
+            unfocusedBorderColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.6f),
+        )
+    } else {
+        OutlinedTextFieldDefaults.colors()
+    }
 
     Row(
         modifier = Modifier
@@ -468,11 +542,20 @@ private fun InputRow(
             modifier = Modifier
                 .weight(1f)
                 .semantics {
-                    contentDescription = "Campo de texto. Escribi tu consulta normativa aqui."
+                    contentDescription = if (isVoiceInput && value.isNotBlank()) {
+                        "Campo de texto con voz reconocida. Podés editarlo antes de enviar."
+                    } else {
+                        "Campo de texto. Escribi tu consulta normativa aqui."
+                    }
                 },
-            placeholder = { Text("Escribí tu consulta...") },
-            label = { Text("Consulta") },
-            singleLine = true
+            placeholder = { Text(placeholder) },
+            label = {
+                Text(
+                    if (isVoiceInput && value.isNotBlank()) "Consulta (por voz)" else "Consulta"
+                )
+            },
+            singleLine = true,
+            colors = fieldColors
         )
 
         Spacer(Modifier.width(8.dp))
@@ -486,7 +569,7 @@ private fun InputRow(
                 .semantics {
                     contentDescription = when {
                         isListening -> "Micrófono activo. Tocá para cancelar."
-                        isProcessing -> "Procesando voz. Espera un momento."
+                        isProcessing -> "Procesando voz. Esperá un momento."
                         else -> "Activar reconocimiento de voz."
                     }
                 }
