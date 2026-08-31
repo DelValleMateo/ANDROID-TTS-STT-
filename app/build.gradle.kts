@@ -118,4 +118,8 @@ dependencies {
 
     // Se activa solo en debug desde RetrofitProvider.
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+
+    testImplementation("io.mockk:mockk:1.13.10")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")
 }
+

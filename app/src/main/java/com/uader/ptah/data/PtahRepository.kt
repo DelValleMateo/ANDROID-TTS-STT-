@@ -1,6 +1,8 @@
 package com.uader.ptah.data
 
 import android.util.Log
+import retrofit2.HttpException
+import java.io.IOException
 
 interface PtahRepository {
     suspend fun ask(query: String): Result<QueryResponse>
@@ -11,12 +13,16 @@ class PtahRepositoryImpl(
 ) : PtahRepository {
 
     override suspend fun ask(query: String): Result<QueryResponse> {
-        return runCatching {
+        return try {
             Log.d(TAG, "Enviando consulta textual a Groq: $query")
 
             val request = GroqChatCompletionRequest(
                 model = GROQ_MODEL,
                 messages = listOf(
+                    GroqMessage(
+                        role = "system",
+                        content = "Eres PTAH, un asistente normativo por voz. Tus respuestas deben ser claras, concisas y en tono conversacional. IMPORTANTE: NO uses NUNCA formato Markdown (asteriscos, negritas, cursivas, listas con símbolos o tablas), ya que tu respuesta será leída directamente por un sintetizador de voz. Responde siempre en texto plano simple."
+                    ),
                     GroqMessage(
                         role = "user",
                         content = query
@@ -39,13 +45,28 @@ class PtahRepositoryImpl(
                 ?.content
                 ?.trim()
                 .orEmpty()
+                
+            val cleanAnswer = answer.replace("**", "")
+                .replace("__", "")
+                .replace("###", "")
+                .replace("##", "")
+                .replace("#", "")
 
-            if (answer.isBlank()) {
+            if (cleanAnswer.isBlank()) {
                 throw IllegalStateException("No se obtuvo una respuesta valida.")
             }
 
             Log.d(TAG, "Respuesta textual recibida de Groq.")
-            QueryResponse(answer = answer)
+            Result.success(QueryResponse(answer = cleanAnswer))
+        } catch (e: HttpException) {
+            Log.e(TAG, "Error HTTP en la consulta: ${e.code()}", e)
+            Result.failure(e)
+        } catch (e: IOException) {
+            Log.e(TAG, "Error de red en la consulta: ${e.message}", e)
+            Result.failure(e)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error inesperado en la consulta: ${e.message}", e)
+            Result.failure(e)
         }
     }
 

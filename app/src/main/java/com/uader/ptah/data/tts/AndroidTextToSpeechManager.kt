@@ -56,14 +56,17 @@ class AndroidTextToSpeechManager(context: Context) : SpeechOutput {
 
     override fun speak(messageId: Long, text: String) {
         if (released || text.isBlank()) return
+        
+        val cleanText = cleanMarkdownForSpeech(text)
+        
         if (!ready) {
-            pendingRequest = SpeechRequest(messageId, text)
+            pendingRequest = SpeechRequest(messageId, cleanText)
             _state.value = TtsState.Initializing
             return
         }
 
         val tts = engine ?: return fail("El motor de voz no está disponible.")
-        val chunks = splitForEngine(text)
+        val chunks = splitForEngine(cleanText)
         activeMessageId = messageId
         _state.value = TtsState.Speaking(messageId)
         chunks.forEachIndexed { index, chunk ->
@@ -130,5 +133,31 @@ class AndroidTextToSpeechManager(context: Context) : SpeechOutput {
 
         private fun utteranceId(messageId: Long, index: Int, lastIndex: Int): String =
             "$messageId:$index${if (index == lastIndex) LAST_SUFFIX else ""}"
+
+        /**
+         * Elimina caracteres de Markdown para que el TTS lea de forma natural
+         * y no pronuncie "asterisco asterisco" o "barra vertical".
+         */
+        private fun cleanMarkdownForSpeech(text: String): String {
+            var result = text
+            // Eliminar negritas, cursivas, subrayados
+            result = result.replace("**", "")
+            result = result.replace("__", "")
+            result = result.replace("*", "")
+            result = result.replace("_", "")
+            // Eliminar marcadores de encabezado y código
+            result = result.replace("###", "")
+            result = result.replace("##", "")
+            result = result.replace("#", "")
+            result = result.replace("```", "")
+            result = result.replace("`", "")
+            // Formatear tablas: reemplazar separadores | y - por comas o espacios
+            result = result.replace("|", " ")
+            result = result.replace("---", " ")
+            result = result.replace("--", " ")
+            // Eliminar saltos de línea extra para mayor fluidez
+            result = result.replace(Regex("\\n{2,}"), "\n")
+            return result.trim()
+        }
     }
 }

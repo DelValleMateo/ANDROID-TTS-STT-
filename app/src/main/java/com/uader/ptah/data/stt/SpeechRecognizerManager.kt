@@ -63,7 +63,7 @@ class SpeechRecognizerManager(private val context: Context) {
                         RecognizerIntent.EXTRA_LANGUAGE_MODEL,
                         RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
                     )
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "es-AR")
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "es-AR")
                     putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
                     putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
@@ -188,6 +188,10 @@ class SpeechRecognizerManager(private val context: Context) {
             "Error del servidor de reconocimiento. Intentá más tarde."
         SpeechRecognizer.ERROR_SPEECH_TIMEOUT ->
             "No se detectó voz. Intentá hablar más fuerte."
+        11 -> // ERROR_SERVER_DISCONNECTED en APIs modernas
+            "Error del servidor de voz (desconectado). Intentá de nuevo."
+        12 -> // ERROR_LANGUAGE_NOT_SUPPORTED
+            "Idioma no soportado por el motor de voz."
         else ->
             "Error desconocido en el reconocimiento de voz (código $errorCode)."
     }

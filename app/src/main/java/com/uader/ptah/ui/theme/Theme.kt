@@ -9,36 +9,47 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
+    primary = Indigo400,
+    onPrimary = Color.White,
+    primaryContainer = Indigo600.copy(alpha = 0.2f),
+    onPrimaryContainer = Indigo400,
+    secondary = Indigo400,
+    background = BackgroundDark,
+    onBackground = TextPrimaryDark,
+    surface = SurfaceDark,
+    onSurface = TextPrimaryDark,
+    surfaceVariant = SurfaceVariantDark,
+    onSurfaceVariant = TextSecondaryDark,
+    error = ErrorRed,
+    errorContainer = ErrorRedContainerDark,
+    onErrorContainer = ErrorRedContainer
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
+    primary = Indigo600,
     onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+    primaryContainer = Indigo600.copy(alpha = 0.1f),
+    onPrimaryContainer = Indigo600,
+    secondary = Indigo500,
+    background = BackgroundLight,
+    onBackground = TextPrimaryLight,
+    surface = SurfaceLight,
+    onSurface = TextPrimaryLight,
+    surfaceVariant = SurfaceVariantLight,
+    onSurfaceVariant = TextSecondaryLight,
+    error = ErrorRed,
+    errorContainer = ErrorRedContainer,
+    onErrorContainer = ErrorRedContainerDark
 )
 
 @Composable
 fun PTAHTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color desactivado para garantizar contraste predecible
-    // del botón Enviar contra el fondo (Material You puede aplanarlos).
-    dynamicColor: Boolean = false,
+    dynamicColor: Boolean = false, // Dinámico desactivado para control total
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -46,7 +57,6 @@ fun PTAHTheme(
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
     }

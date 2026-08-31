@@ -28,24 +28,25 @@ class ChatViewModel(
     private val speechOutput: SpeechOutput
 ) : ViewModel() {
 
+    // ─── Estado de Conversación (Unificado) ──────────────────────────────────
+    
+    var conversationState by mutableStateOf<ConversationState>(ConversationState.Idle)
+        private set
+
+    var autoSpeakEnabled by mutableStateOf(true) // Por defecto encendido
+        private set
+
+    var metrics by mutableStateOf(ConversationMetrics())
+        private set
+
     // ─── Estado del chat ────────────────────────────────────────────────────
 
     private val _messages = mutableStateListOf<ChatMessage>()
     val messages: List<ChatMessage> = _messages
 
-    var uiState by mutableStateOf<ChatUiState>(ChatUiState.Idle)
-        private set
-
     var inputText by mutableStateOf("")
         private set
 
-    /**
-     * Indica el origen del texto actualmente en [inputText].
-     *
-     * Se actualiza cada vez que el texto cambia por teclado ([KEYBOARD]) o
-     * llega un resultado STT ([VOICE]). Se incluye en [ChatMessage] al enviar,
-     * para que la UI dibuje el badge correcto en la burbuja del usuario.
-     */
     var inputOrigin by mutableStateOf(InputOrigin.KEYBOARD)
         private set
 
@@ -53,82 +54,98 @@ class ChatViewModel(
     private var nextMessageId = 0L
 
     val ttsState: StateFlow<TtsState> = speechOutput.state
-
-    // ─── Estado de STT ──────────────────────────────────────────────────────
-
-    /** Estado del reconocimiento de voz. La UI observa este Flow para actualizar los indicadores. */
     val sttState: StateFlow<SttState> = speechManager.sttState
+
+    // ─── Tiempos para métricas ──────────────────────────────────────────────
+    private var sttStartTime: Long? = null
+    private var apiStartTime: Long? = null
+    private var ttsStartTime: Long? = null
+    private var flowStartTime: Long? = null // Para la latencia total voz->respuesta
 
     // ─── Eventos de UI (one-shot) ────────────────────────────────────────────
 
     private val _userEvents = Channel<UserEvent>(capacity = Channel.BUFFERED)
     val userEvents = _userEvents.receiveAsFlow()
 
-    // ─── Init: observar cambios de SttState ─────────────────────────────────
-
     init {
         viewModelScope.launch {
             speechManager.sttState.collect { state ->
                 when (state) {
+                    is SttState.Idle -> {
+                        if (conversationState is ConversationState.Listening || conversationState is ConversationState.ProcessingVoice) {
+                            conversationState = ConversationState.Idle
+                        }
+                    }
+                    is SttState.Listening -> conversationState = ConversationState.Listening
+                    is SttState.Processing -> conversationState = ConversationState.ProcessingVoice
                     is SttState.Result -> {
-                        // Delegar en la función pública para que sea testeable
-                        // y para documentar claramente el punto de unificación.
+                        val latency = sttStartTime?.let { SystemClock.elapsedRealtime() - it }
+                        metrics = metrics.copy(sttLatencyMs = latency)
+                        
                         onSttResultReceived(state.text)
                         speechManager.resetToIdle()
                     }
                     is SttState.Error -> {
                         Log.e(TAG, "STT Error: ${state.message}")
+                        conversationState = ConversationState.Error(state.message, canRetry = false)
                         _userEvents.send(UserEvent.ShowSttError(state.message))
                     }
                     is SttState.PermissionDenied -> {
                         _userEvents.send(
-                            UserEvent.ShowSttError(
-                                "Permiso de micrófono denegado. Habilitalo en Configuración."
-                            )
+                            UserEvent.ShowSttError("Permiso de micrófono denegado. Habilitalo en Configuración.")
                         )
+                        conversationState = ConversationState.Idle
                     }
-                    else -> Unit
                 }
             }
         }
         viewModelScope.launch {
             speechOutput.state.collect { state ->
-                if (state is TtsState.Error) _userEvents.send(UserEvent.ShowTtsError(state.message))
+                when (state) {
+                    is TtsState.Idle -> {
+                        if (conversationState is ConversationState.Speaking) {
+                            val latency = ttsStartTime?.let { SystemClock.elapsedRealtime() - it }
+                            metrics = metrics.copy(
+                                ttsLatencyMs = latency,
+                                totalLatencyMs = flowStartTime?.let { SystemClock.elapsedRealtime() - it }
+                            )
+                            conversationState = ConversationState.Idle
+                        }
+                    }
+                    is TtsState.Speaking -> {
+                        if (ttsStartTime == null) ttsStartTime = SystemClock.elapsedRealtime()
+                        conversationState = ConversationState.Speaking(state.messageId)
+                    }
+                    is TtsState.Error -> {
+                        _userEvents.send(UserEvent.ShowTtsError(state.message))
+                        if (conversationState is ConversationState.Speaking) {
+                            conversationState = ConversationState.Idle
+                        }
+                    }
+                    is TtsState.Initializing -> Unit
+                }
             }
         }
     }
 
-    // ─── Punto de entrada unificado para resultado STT ───────────────────────
+    // ─── Acciones del chat ──────────────────────────────────────────────────
 
-    /**
-     * Recibe el texto reconocido por el motor STT y lo carga en el campo de entrada.
-     *
-     * Este es el **único punto de unión** entre la tubería de voz y la tubería de texto:
-     * después de esta función, el texto dictado sigue exactamente el mismo camino que el
-     * texto escrito a mano → [inputText] → [onSendClicked] → [executeQuery].
-     *
-     * La UI mantiene el campo editable para que el usuario pueda corregir antes de enviar.
-     *
-     * @param text Texto reconocido por [SpeechRecognizerManager]. Nunca vacío (el manager
-     *             emite [SttState.Error] si el resultado es blank).
-     */
+    fun toggleAutoSpeak() {
+        autoSpeakEnabled = !autoSpeakEnabled
+    }
+
     fun onSttResultReceived(text: String) {
         inputText = text
         inputOrigin = InputOrigin.VOICE
         Log.d(TAG, "STT Result → inputText: \"$text\" | origin: VOICE")
+        
+        // Sprint 10: Auto-send for Voice queries
+        onSendClicked()
     }
 
-    // ─── Acciones del chat ──────────────────────────────────────────────────
-
-    /**
-     * Llamado por la UI cada vez que el usuario modifica el campo de texto manualmente.
-     * Resetea el origen a [InputOrigin.KEYBOARD] para no etiquetar como voz un texto editado.
-     */
     fun onTextChanged(text: String) {
         val wasVoiceInput = inputOrigin == InputOrigin.VOICE
         inputText = text
-        // Si el usuario edita el campo después de un dictado, el origen pasa a KEYBOARD.
-        // Así la burbuja no mostrará el badge de voz para texto modificado por el usuario.
         if (wasVoiceInput) {
             inputOrigin = InputOrigin.KEYBOARD
         }
@@ -137,40 +154,60 @@ class ChatViewModel(
     fun onSendClicked() {
         val clean = inputText.trim()
         if (clean.isEmpty()) return
-        if (uiState is ChatUiState.Loading) return
+        if (conversationState is ConversationState.Consulting) return
 
-        val origin = inputOrigin          // capturar antes de limpiar
+        val origin = inputOrigin
         _messages.add(ChatMessage(nextMessageId++, ChatMessage.Author.USER, clean, origin))
         inputText = ""
-        inputOrigin = InputOrigin.KEYBOARD   // resetear para la próxima consulta
-        executeQuery(clean)
+        inputOrigin = InputOrigin.KEYBOARD
+        
+        executeQuery(clean, origin)
     }
 
     fun retryLastQuery() {
         lastQuery?.let {
             Log.d(TAG, "Reintentando ultima consulta: $it")
-            executeQuery(it)
+            // Asumimos origen teclado para reintentos por defecto
+            executeQuery(it, InputOrigin.KEYBOARD)
         }
     }
 
-    private fun executeQuery(query: String) {
+    private fun executeQuery(query: String, origin: InputOrigin) {
         lastQuery = query
-        uiState = ChatUiState.Loading
+        conversationState = ConversationState.Consulting(query)
 
         viewModelScope.launch {
-            val startedAt = SystemClock.elapsedRealtime()
+            apiStartTime = SystemClock.elapsedRealtime()
+            if (origin != InputOrigin.VOICE) {
+                // Si es texto, reiniciamos el tiempo total
+                flowStartTime = apiStartTime 
+            }
             Log.d(TAG, "Inicio de consulta a Groq: $query")
 
             repository.ask(query)
                 .onSuccess { response ->
-                    val latencyMs = SystemClock.elapsedRealtime() - startedAt
+                    val latencyMs = SystemClock.elapsedRealtime() - apiStartTime!!
+                    metrics = metrics.copy(apiLatencyMs = latencyMs)
                     Log.d(TAG, "Fin de consulta a Groq. Latencia: ${latencyMs}ms")
+                    
                     speechOutput.stop()
-                    _messages.add(ChatMessage(nextMessageId++, ChatMessage.Author.SYSTEM, response.answer))
-                    uiState = ChatUiState.Success(latencyMs)
+                    val sysMessage = ChatMessage(nextMessageId++, ChatMessage.Author.SYSTEM, response.answer)
+                    _messages.add(sysMessage)
+                    
+                    conversationState = ConversationState.Idle
+
+                    // Reproducir automáticamente si el origen es voz o si autoSpeakEnabled
+                    if (autoSpeakEnabled || origin == InputOrigin.VOICE) {
+                        onSpeakClicked(sysMessage)
+                    } else {
+                        // Flujo finalizado si no hay TTS
+                        metrics = metrics.copy(
+                            totalLatencyMs = flowStartTime?.let { SystemClock.elapsedRealtime() - it }
+                        )
+                    }
                 }
                 .onFailure { throwable ->
-                    handleFailure(throwable, startedAt)
+                    handleFailure(throwable, apiStartTime!!)
                 }
         }
     }
@@ -178,31 +215,22 @@ class ChatViewModel(
     private fun handleFailure(throwable: Throwable, startedAt: Long) {
         val latencyMs = SystemClock.elapsedRealtime() - startedAt
         val message = when (throwable) {
-            is ApiException -> throwable.message
-                ?: "El servicio respondio con un error. Intenta nuevamente."
-            is IOException -> throwable.message
-                ?: "No se pudo conectar con el servidor. Verifica tu conexion."
+            is ApiException -> throwable.message ?: "El servicio respondió con un error. Intenta nuevamente."
+            is IOException -> "No se pudo conectar con el servidor. Verifica tu conexión."
+            is retrofit2.HttpException -> "Error HTTP del servidor. Intenta nuevamente."
             else -> throwable.message ?: "Fallo inesperado. Intenta nuevamente."
         }
 
         Log.e(TAG, "Error en consulta a Groq tras ${latencyMs}ms: $message", throwable)
-        uiState = ChatUiState.Error(message, latencyMs)
+        conversationState = ConversationState.Error(message, canRetry = true)
 
         viewModelScope.launch {
             _userEvents.send(UserEvent.ShowError(message))
         }
     }
 
-    // ─── Acciones de STT ────────────────────────────────────────────────────
+    // ─── Acciones de STT / TTS ───────────────────────────────────────────────
 
-    /**
-     * Alterna el reconocimiento de voz.
-     * - Si está en [SttState.Idle]: inicia la escucha.
-     * - Si está en [SttState.Listening] o [SttState.Processing]: cancela.
-     *
-     * La UI es responsable de verificar el permiso RECORD_AUDIO antes de llamar
-     * a este método. Si el permiso no fue otorgado, emite [UserEvent.RequestMicPermission].
-     */
     fun onMicClicked(permissionGranted: Boolean) {
         if (!permissionGranted) {
             viewModelScope.launch {
@@ -211,16 +239,28 @@ class ChatViewModel(
             return
         }
 
+        // Si está hablando, callar al asistente
+        if (conversationState is ConversationState.Speaking) {
+            speechOutput.stop()
+        }
+
         when (speechManager.sttState.value) {
             is SttState.Idle, is SttState.Error, is SttState.Result,
-            is SttState.PermissionDenied -> speechManager.startListening()
+            is SttState.PermissionDenied -> {
+                sttStartTime = SystemClock.elapsedRealtime()
+                flowStartTime = sttStartTime // Inicia el flujo completo Voz->Respuesta
+                speechManager.startListening()
+            }
             is SttState.Listening -> speechManager.cancel()
-            is SttState.Processing -> Unit // No interrumpir el procesamiento.
+            is SttState.Processing -> Unit
         }
     }
 
     fun onSpeakClicked(message: ChatMessage) {
-        if (message.author == ChatMessage.Author.SYSTEM) speechOutput.speak(message.id, message.text)
+        if (message.author == ChatMessage.Author.SYSTEM) {
+            ttsStartTime = null // reset antes de inicializar
+            speechOutput.speak(message.id, message.text)
+        }
     }
 
     fun onStopSpeakingClicked() = speechOutput.stop()
@@ -232,8 +272,6 @@ class ChatViewModel(
         speechManager.destroy()
         speechOutput.shutdown()
     }
-
-    // ─── Factory ─────────────────────────────────────────────────────────────
 
     class Factory(
         private val context: Context,
