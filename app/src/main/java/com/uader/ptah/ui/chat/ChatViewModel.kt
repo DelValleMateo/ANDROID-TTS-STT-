@@ -11,7 +11,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.uader.ptah.data.PtahRepository
-import com.uader.ptah.data.network.ApiException
 import com.uader.ptah.data.stt.SpeechRecognizerManager
 import com.uader.ptah.data.tts.SpeechOutput
 import com.uader.ptah.data.tts.TtsState
@@ -20,7 +19,6 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
-import java.io.IOException
 
 class ChatViewModel(
     private val repository: PtahRepository,
@@ -137,7 +135,7 @@ class ChatViewModel(
     fun onSttResultReceived(text: String) {
         inputText = text
         inputOrigin = InputOrigin.VOICE
-        Log.d(TAG, "STT Result → inputText: \"$text\" | origin: VOICE")
+        Log.d(TAG, "Resultado STT recibido; origen: VOICE")
         
         // Sprint 10: Auto-send for Voice queries
         onSendClicked()
@@ -166,7 +164,7 @@ class ChatViewModel(
 
     fun retryLastQuery() {
         lastQuery?.let {
-            Log.d(TAG, "Reintentando ultima consulta: $it")
+            Log.d(TAG, "Reintentando la última consulta.")
             // Asumimos origen teclado para reintentos por defecto
             executeQuery(it, InputOrigin.KEYBOARD)
         }
@@ -182,13 +180,13 @@ class ChatViewModel(
                 // Si es texto, reiniciamos el tiempo total
                 flowStartTime = apiStartTime 
             }
-            Log.d(TAG, "Inicio de consulta a Groq: $query")
+            Log.d(TAG, "Inicio de consulta al servicio remoto.")
 
             repository.ask(query)
                 .onSuccess { response ->
                     val latencyMs = SystemClock.elapsedRealtime() - apiStartTime!!
                     metrics = metrics.copy(apiLatencyMs = latencyMs)
-                    Log.d(TAG, "Fin de consulta a Groq. Latencia: ${latencyMs}ms")
+                    Log.d(TAG, "Fin de consulta remota. Latencia: ${latencyMs}ms")
                     
                     speechOutput.stop()
                     val sysMessage = ChatMessage(nextMessageId++, ChatMessage.Author.SYSTEM, response.answer)
@@ -214,14 +212,11 @@ class ChatViewModel(
 
     private fun handleFailure(throwable: Throwable, startedAt: Long) {
         val latencyMs = SystemClock.elapsedRealtime() - startedAt
-        val message = when (throwable) {
-            is ApiException -> throwable.message ?: "El servicio respondió con un error. Intenta nuevamente."
-            is IOException -> "No se pudo conectar con el servidor. Verifica tu conexión."
-            is retrofit2.HttpException -> "Error HTTP del servidor. Intenta nuevamente."
-            else -> throwable.message ?: "Fallo inesperado. Intenta nuevamente."
-        }
+        val message = throwable.message
+            ?.takeIf { it.isNotBlank() }
+            ?: "Fallo inesperado. Intenta nuevamente."
 
-        Log.e(TAG, "Error en consulta a Groq tras ${latencyMs}ms: $message", throwable)
+        Log.e(TAG, "Error en consulta remota tras ${latencyMs}ms: $message", throwable)
         conversationState = ConversationState.Error(message, canRetry = true)
 
         viewModelScope.launch {

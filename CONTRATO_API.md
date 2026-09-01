@@ -1,4 +1,9 @@
 # Contrato de API - Sprint 1
+
+> **Estado en Sprint 11:** documento histórico del mock local. Este contrato no está
+> implementado por el módulo activo `:app` y no existe evidencia en el repositorio de que
+> sea el contrato del backend PTAH definitivo. No debe usarse como especificación vigente.
+
 **Endpoint:** `/busqueda/semantica`
 **Método:** `POST`
 **Request:** `{"consulta": "string"}`
@@ -15,3 +20,10 @@ El `ChatViewModel` coordina el flujo de pantalla: toma el texto ingresado por el
 La pantalla `ChatScreen` usa una `LazyColumn` para renderizar dinámicamente el historial. Los mensajes del usuario y del sistema se muestran como burbujas diferenciadas por alineación y color. Cuando llegan artículos normativos, la respuesta del sistema se agrega al chat y la fila de estado muestra la cantidad de resultados.
 
 La latencia se mide en el `ChatViewModel` desde el momento previo al envío al Repository hasta que vuelve la respuesta del Mock o el error. El tiempo se calcula con `SystemClock.elapsedRealtime()`, se publica en el estado de UI y se registra en Logcat con los tags `ChatViewModel` y `PtahRepository` para poder demostrar el ida y vuelta durante la presentación.
+
+## Integración vigente en Sprint 11
+
+El proveedor temporal del módulo `:app` es Groq Chat Completions. Su contrato está aislado
+detrás de `QueryRemoteDataSource`; `PtahRepository` y la aplicación conservan el contrato
+interno `ask(query: String): Result<QueryResponse>`. La auditoría detallada y los pasos para
+reemplazar el proveedor están en `DOCUMENTACION_SPRINT_11.md`.

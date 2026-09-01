@@ -1,3 +1,4 @@
+import java.net.URI
 import java.util.Properties
 
 plugins {
@@ -8,7 +9,6 @@ plugins {
 val localPropertiesFile = rootProject.file("local.properties")
 
 val localProperties = Properties().apply {
-    val localPropertiesFile = rootProject.file("local.properties")
     if (localPropertiesFile.exists()) {
         localPropertiesFile.inputStream().use(::load)
     }
@@ -16,6 +16,18 @@ val localProperties = Properties().apply {
 
 fun String.escapeForBuildConfig(): String =
     replace("\\", "\\\\").replace("\"", "\\\"")
+
+fun normalizeHttpBaseUrl(value: String): String {
+    val normalized = value.trim().let { if (it.endsWith('/')) it else "$it/" }
+    val uri = runCatching { URI(normalized) }
+        .getOrElse { throw GradleException("PTAH_API_BASE_URL no es una URL válida.", it) }
+
+    if (uri.scheme !in setOf("http", "https") || uri.host.isNullOrBlank()) {
+        throw GradleException("PTAH_API_BASE_URL debe ser una URL HTTP(S) absoluta.")
+    }
+
+    return normalized
+}
 
 fun localProperty(name: String): String? {
     localProperties.getProperty(name)
@@ -44,8 +56,15 @@ val groqApiKey = localProperty("GROQ_API_KEY")
     ?: providers.gradleProperty("GROQ_API_KEY").orNull?.trim()?.takeIf { it.isNotBlank() }
     ?: ""
 
-logger.lifecycle("GROQ_API_KEY configurada: ${groqApiKey.isNotBlank()}")
-logger.lifecycle("Longitud de GROQ_API_KEY: ${groqApiKey.length} caracteres")
+val ptahApiBaseUrl = (
+    localProperty("PTAH_API_BASE_URL")
+        ?: providers.gradleProperty("PTAH_API_BASE_URL").orNull?.trim()?.takeIf { it.isNotBlank() }
+        ?: "https://api.groq.com/openai/v1/"
+    ).let(::normalizeHttpBaseUrl)
+
+val groqModel = localProperty("GROQ_MODEL")
+    ?: providers.gradleProperty("GROQ_MODEL").orNull?.trim()?.takeIf { it.isNotBlank() }
+    ?: "openai/gpt-oss-120b"
 
 android {
     namespace = "com.uader.ptah"
@@ -64,6 +83,8 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "GROQ_API_KEY", "\"${groqApiKey.escapeForBuildConfig()}\"")
+        buildConfigField("String", "PTAH_API_BASE_URL", "\"${ptahApiBaseUrl.escapeForBuildConfig()}\"")
+        buildConfigField("String", "GROQ_MODEL", "\"${groqModel.escapeForBuildConfig()}\"")
     }
 
     buildTypes {
@@ -112,7 +133,7 @@ dependencies {
 
     implementation(libs.androidx.lifecycle.viewmodel.compose)
 
-    // Retrofit y Gson para hacer peticiones HTTP a Groq.
+    // Cliente HTTP. Groq permanece como proveedor temporal detrás de la capa de datos.
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
 
@@ -121,5 +142,5 @@ dependencies {
 
     testImplementation("io.mockk:mockk:1.13.10")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }
-

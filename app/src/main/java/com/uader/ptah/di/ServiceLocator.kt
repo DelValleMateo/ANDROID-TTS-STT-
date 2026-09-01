@@ -21,7 +21,7 @@ object ServiceLocator {
 
     val ptahRepository: PtahRepository by lazy {
         PtahRepositoryImpl(
-            apiService = RetrofitProvider.groqApiService
+            remoteDataSource = RetrofitProvider.queryRemoteDataSource
         )
     }
 

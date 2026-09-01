@@ -1,5 +1,10 @@
 # Documentacion tecnica - Proyecto PTAH Android
 
+> Nota de vigencia: este documento describe principalmente la arquitectura de entregas
+> anteriores. Para el estado de red posterior a STT/TTS y la preparacion del backend PTAH,
+> consultar `DOCUMENTACION_SPRINT_11.md`. El contrato `/busqueda/semantica` es historico y
+> Groq continua unicamente como proveedor temporal.
+
 ## 1. Descripcion general del proyecto
 
 PTAH - Cliente Movil Android es una aplicacion Android escrita en Kotlin que permite realizar consultas en lenguaje natural sobre reglamentacion institucional mediante una interfaz conversacional textual.
