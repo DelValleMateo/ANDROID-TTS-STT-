@@ -126,6 +126,8 @@ private fun SystemMessage(
     onStop: () -> Unit
 ) {
     val isSpeaking = ttsState is TtsState.Speaking && ttsState.messageId == message.id
+    val isGenerating = ttsState is TtsState.Generating && ttsState.messageId == message.id
+    val isActive = isSpeaking || isGenerating
 
     Column(
         modifier = Modifier
@@ -143,40 +145,40 @@ private fun SystemMessage(
         // Controles de audio
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(
-                onClick = if (isSpeaking) onStop else onSpeak,
+                onClick = if (isActive) onStop else onSpeak,
                 enabled = ttsState !is TtsState.Initializing,
                 modifier = Modifier.semantics {
-                    contentDescription = if (isSpeaking) "Detener audio" else "Escuchar respuesta"
+                    contentDescription = if (isActive) "Detener audio" else "Escuchar respuesta"
                 }
             ) {
                 Icon(
-                    imageVector = if (isSpeaking) Icons.Default.Stop else Icons.AutoMirrored.Filled.VolumeUp,
+                    imageVector = if (isActive) Icons.Default.Stop else Icons.AutoMirrored.Filled.VolumeUp,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
                     tint = MaterialTheme.colorScheme.primary
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    text = if (isSpeaking) "Detener" else "Escuchar",
+                    text = if (isActive) "Detener" else "Escuchar",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
             }
 
-            AnimatedVisibility(visible = isSpeaking) {
+            AnimatedVisibility(visible = isActive) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .padding(start = 12.dp)
                         .semantics {
                             liveRegion = LiveRegionMode.Polite
-                            contentDescription = "Reproduciendo audio"
+                            contentDescription = if (isGenerating) "Generando voz natural" else "Reproduciendo audio"
                         }
                 ) {
                     AudioVisualizerDot()
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        text = "Reproduciendo",
+                        text = if (isGenerating) "Generando..." else "Reproduciendo",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

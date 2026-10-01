@@ -85,6 +85,10 @@ android {
         buildConfigField("String", "GROQ_API_KEY", "\"${groqApiKey.escapeForBuildConfig()}\"")
         buildConfigField("String", "PTAH_API_BASE_URL", "\"${ptahApiBaseUrl.escapeForBuildConfig()}\"")
         buildConfigField("String", "GROQ_MODEL", "\"${groqModel.escapeForBuildConfig()}\"")
+
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
     }
 
     buildTypes {
@@ -107,9 +111,15 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+    androidResources {
+        noCompress += listOf("onnx", "bin")
     }
 }
 
@@ -139,6 +149,9 @@ dependencies {
 
     // Se activa solo en debug desde RetrofitProvider.
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+
+    // Sherpa-ONNX para síntesis de voz offline local (Kokoro TTS)
+    implementation(files("libs/sherpa-onnx-1.13.8.aar"))
 
     testImplementation("io.mockk:mockk:1.13.10")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")

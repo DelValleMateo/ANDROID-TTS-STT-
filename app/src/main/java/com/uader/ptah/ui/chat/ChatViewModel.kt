@@ -23,8 +23,9 @@ import kotlinx.coroutines.launch
 class ChatViewModel(
     private val repository: PtahRepository,
     private val speechManager: SpeechRecognizerManager,
-    private val speechOutput: SpeechOutput
+    private val naturalTtsManager: SpeechOutput
 ) : ViewModel() {
+    private val speechOutput: SpeechOutput get() = naturalTtsManager
 
     // ─── Estado de Conversación (Unificado) ──────────────────────────────────
     
@@ -98,7 +99,7 @@ class ChatViewModel(
             }
         }
         viewModelScope.launch {
-            speechOutput.state.collect { state ->
+            naturalTtsManager.state.collect { state ->
                 when (state) {
                     is TtsState.Idle -> {
                         if (conversationState is ConversationState.Speaking) {
@@ -109,6 +110,9 @@ class ChatViewModel(
                             )
                             conversationState = ConversationState.Idle
                         }
+                    }
+                    is TtsState.Generating -> {
+                        if (ttsStartTime == null) ttsStartTime = SystemClock.elapsedRealtime()
                     }
                     is TtsState.Speaking -> {
                         if (ttsStartTime == null) ttsStartTime = SystemClock.elapsedRealtime()
@@ -169,6 +173,9 @@ class ChatViewModel(
             executeQuery(it, InputOrigin.KEYBOARD)
         }
     }
+
+    /** Alias para reintentar la última consulta fallida sin volver a escribir. */
+    fun reintentarUltimaConsulta() = retryLastQuery()
 
     private fun executeQuery(query: String, origin: InputOrigin) {
         lastQuery = query
@@ -254,18 +261,18 @@ class ChatViewModel(
     fun onSpeakClicked(message: ChatMessage) {
         if (message.author == ChatMessage.Author.SYSTEM) {
             ttsStartTime = null // reset antes de inicializar
-            speechOutput.speak(message.id, message.text)
+            naturalTtsManager.speak(message.id, message.text)
         }
     }
 
-    fun onStopSpeakingClicked() = speechOutput.stop()
+    fun onStopSpeakingClicked() = naturalTtsManager.stop()
 
     // ─── Ciclo de vida ───────────────────────────────────────────────────────
 
     override fun onCleared() {
         super.onCleared()
         speechManager.destroy()
-        speechOutput.shutdown()
+        naturalTtsManager.shutdown()
     }
 
     class Factory(
@@ -280,7 +287,7 @@ class ChatViewModel(
             return ChatViewModel(
                 repository = repository,
                 speechManager = ServiceLocator.createSpeechManager(context),
-                speechOutput = ServiceLocator.createSpeechOutput(context)
+                naturalTtsManager = ServiceLocator.createSpeechOutput(context)
             ) as T
         }
     }
